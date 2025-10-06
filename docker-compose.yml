@@ -1,0 +1,28 @@
+version: "3.8"
+services:
+  backend:
+    build: ./aura-backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+  frontend:
+    image: node:18
+    working_dir: /app
+    volumes:
+      - ./aura-frontend:/app
+    command: ["sh", "-c", "echo 'Frontend placeholder' && tail -f /dev/null"]
+    ports:
+      - "3000:3000"
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: aura
+      POSTGRES_PASSWORD: aura_pass
+      POSTGRES_DB: aura_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
