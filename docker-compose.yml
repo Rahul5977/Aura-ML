@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   backend:
     build: ./aura-backend
@@ -6,6 +5,17 @@ services:
       - "8000:8000"
     depends_on:
       - db
+    environment:
+      - DATABASE_URL=postgresql://aura:aura_pass@db:5432/aura_db
+    volumes:
+      - ./aura-backend:/app
+    command:
+      [
+        "sh",
+        "-c",
+        "sleep 10 && python -m prisma db push && uvicorn main:app --host 0.0.0.0 --port 8000 --reload",
+      ]
+
   frontend:
     image: node:18
     working_dir: /app
@@ -14,6 +24,7 @@ services:
     command: ["sh", "-c", "echo 'Frontend placeholder' && tail -f /dev/null"]
     ports:
       - "3000:3000"
+
   db:
     image: postgres:15
     environment:
@@ -24,5 +35,11 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aura -d aura_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   pgdata:
