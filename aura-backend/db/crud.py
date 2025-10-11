@@ -1,7 +1,7 @@
 from prisma import Prisma
 from db.prisma import User, Conversation, Message
 from core.security import get_password_hash, verify_password
-from schemas.user import UserCreate, UserUpdate
+from schemas.user import UserCreate, UserUpdate # type: ignore
 from datetime import datetime
 from typing import Optional, List
 

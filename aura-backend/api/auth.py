@@ -3,8 +3,8 @@ from fastapi.security import HTTPBearer
 from core.dependencies import get_current_user
 from core.security import create_access_token, verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
 from db.crud import create_user, authenticate_user, get_user_by_username, get_user_by_email, get_user_by_id, update_user_profile, update_user_password
-from schemas.user import UserCreate, UserResponse, UserLogin, UserUpdate, PasswordChange
-from schemas.token import Token
+from schemas.user import UserCreate, UserResponse, UserLogin, UserUpdate, PasswordChange # type: ignore
+from schemas.token import Token # type: ignore
 from datetime import timedelta
 from typing import Optional
 
