@@ -3,9 +3,12 @@ from datetime import datetime
 from typing import Optional
 import re
 
-class UserCreate(BaseModel):
+# User schemas
+class UserBase(BaseModel):
     email: EmailStr
     username: str
+
+class UserCreate(UserBase):
     password: str
     full_name: str
     
@@ -25,10 +28,6 @@ class UserCreate(BaseModel):
             raise ValueError('Password must be at least 8 characters long')
         if len(v) > 72:
             raise ValueError('Password must be less than 72 characters')
-        if not re.search(r'[A-Za-z]', v):
-            raise ValueError('Password must contain at least one letter')
-        if not re.search(r'\d', v):
-            raise ValueError('Password must contain at least one number')
         return v
     
     @validator('full_name')
@@ -39,27 +38,18 @@ class UserCreate(BaseModel):
             raise ValueError('Full name must be less than 100 characters')
         return v.strip()
 
-class UserResponse(BaseModel):
+class UserResponse(UserBase):
     id: str
-    email: EmailStr
-    username: str
     full_name: str
     is_active: bool
     created_at: datetime
-    updated_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
 
 class UserLogin(BaseModel):
-    username: str  # Can be username or email
+    username: str
     password: str
-    
-    @validator('username')
-    def validate_username_or_email(cls, v):
-        if len(v.strip()) < 3:
-            raise ValueError('Username or email must be at least 3 characters long')
-        return v.strip()
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
@@ -85,9 +75,44 @@ class PasswordChange(BaseModel):
             raise ValueError('Password must be at least 8 characters long')
         if len(v) > 72:
             raise ValueError('Password must be less than 72 characters')
-        if not re.search(r'[A-Za-z]', v):
-            raise ValueError('Password must contain at least one letter')
-        if not re.search(r'\d', v):
-            raise ValueError('Password must contain at least one number')
         return v
 
+# Token schemas
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    user_id: Optional[str] = None
+
+# Conversation schemas
+class ConversationBase(BaseModel):
+    title: Optional[str] = None
+
+class ConversationCreate(ConversationBase):
+    pass
+
+class ConversationResponse(ConversationBase):
+    id: str
+    user_id: str
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+# Message schemas
+class MessageBase(BaseModel):
+    content: str
+    role: str  # "user" or "assistant"
+
+class MessageCreate(MessageBase):
+    pass  # conversation_id comes from URL path
+
+class MessageResponse(MessageBase):
+    id: str
+    conversation_id: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True

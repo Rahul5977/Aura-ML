@@ -1,3 +1,7 @@
 {
-  "python.analysis.extraPaths": ["./aura-backend", "./aura-backend"]
+  "python.analysis.extraPaths": [
+    "./aura-backend",
+    "./aura-backend",
+    "./aura-backend"
+  ]
 }
