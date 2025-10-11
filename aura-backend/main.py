@@ -1,11 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from datetime import timedelta
+from datetime import timedelta, datetime
 import os
 from dotenv import load_dotenv
+import json
+import logging
 
 # Import from existing working modules
 from auth import create_access_token, verify_token, verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
+from websocket_manager import manager as ws_manager
 from database import (
     connect_db, disconnect_db, create_user, authenticate_user, 
     get_user_by_id, get_user_by_username, get_user_by_email,
@@ -21,6 +24,10 @@ from schemas import (
 )
 
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Aura Backend API", version="1.0.0")
 security = HTTPBearer()
@@ -206,3 +213,218 @@ async def change_password(
 async def logout(current_user = Depends(get_current_user)):
     """Logout user (client should discard the JWT token)."""
     return {"message": "Logged out successfully"}
+
+# ============================================================================
+# WebSocket Endpoints for Real-time Chat
+# ============================================================================
+
+@app.websocket("/ws/conversations/{conversation_id}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    conversation_id: str,
+    token: str = Query(...)
+):
+    """
+    WebSocket endpoint for real-time chat in a conversation.
+    
+    Clients must provide a valid JWT token as a query parameter.
+    Messages are broadcasted to all connected clients in the same conversation.
+    
+    Args:
+        websocket: WebSocket connection
+        conversation_id: ID of the conversation to join
+        token: JWT authentication token (query parameter)
+    
+    Message Format (Client to Server):
+        {
+            "type": "message",
+            "content": "message text",
+            "role": "user" or "assistant"
+        }
+    
+    Message Format (Server to Client):
+        {
+            "type": "message" | "system" | "active_users" | "error",
+            "message_id": "...",
+            "content": "...",
+            "role": "user" | "assistant",
+            "sender": {
+                "user_id": "...",
+                "username": "...",
+                "full_name": "..."
+            },
+            "timestamp": "ISO 8601 timestamp"
+        }
+    """
+    # Verify token and get user
+    try:
+        token_data = verify_token(token)
+        user = await get_user_by_id(token_data["user_id"])
+        if not user:
+            await websocket.close(code=1008, reason="Invalid authentication token")
+            return
+    except Exception as e:
+        logger.error(f"WebSocket authentication failed: {e}")
+        await websocket.close(code=1008, reason="Authentication failed")
+        return
+    
+    # Verify conversation exists and user has access
+    try:
+        conversation = await get_conversation_by_id(conversation_id, user.id)
+        if not conversation:
+            await websocket.close(code=1008, reason="Conversation not found or access denied")
+            return
+    except Exception as e:
+        logger.error(f"Error accessing conversation: {e}")
+        await websocket.close(code=1008, reason="Error accessing conversation")
+        return
+    
+    # Connect to WebSocket
+    user_data = {
+        "user_id": user.id,
+        "username": user.username,
+        "full_name": user.full_name
+    }
+    
+    await ws_manager.connect(websocket, conversation_id, user.id, user_data)
+    
+    # Send connection success message
+    await ws_manager.send_personal_message(
+        {
+            "type": "system",
+            "content": f"Connected to conversation: {conversation.title or 'Untitled'}",
+            "timestamp": datetime.now().isoformat()
+        },
+        websocket
+    )
+    
+    try:
+        while True:
+            # Receive message from client
+            data = await websocket.receive_text()
+            
+            try:
+                message_data = json.loads(data)
+                message_type = message_data.get("type", "message")
+                
+                if message_type == "message":
+                    # Extract message content and role
+                    content = message_data.get("content", "").strip()
+                    role = message_data.get("role", "user")
+                    
+                    if not content:
+                        await ws_manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "content": "Message content cannot be empty",
+                                "timestamp": datetime.now().isoformat()
+                            },
+                            websocket
+                        )
+                        continue
+                    
+                    # Validate role
+                    if role not in ["user", "assistant"]:
+                        role = "user"
+                    
+                    # Save message to database
+                    try:
+                        saved_message = await create_message(
+                            conversation_id=conversation_id,
+                            content=content,
+                            role=role
+                        )
+                        
+                        # Prepare broadcast message
+                        broadcast_data = {
+                            "type": "message",
+                            "message_id": saved_message.id,
+                            "content": saved_message.content,
+                            "role": saved_message.role,
+                            "sender": {
+                                "user_id": user.id,
+                                "username": user.username,
+                                "full_name": user.full_name
+                            },
+                            "timestamp": saved_message.created_at.isoformat(),
+                            "conversation_id": conversation_id
+                        }
+                        
+                        # Send confirmation to sender
+                        await ws_manager.send_personal_message(broadcast_data, websocket)
+                        
+                        # Broadcast to other users in the conversation
+                        await ws_manager.broadcast_message(
+                            conversation_id,
+                            broadcast_data,
+                            exclude_user_id=user.id
+                        )
+                        
+                        logger.info(
+                            f"Message from {user.username} in conversation {conversation_id}: "
+                            f"{content[:50]}..."
+                        )
+                        
+                    except Exception as e:
+                        logger.error(f"Error saving message: {e}")
+                        await ws_manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "content": "Failed to save message",
+                                "timestamp": datetime.now().isoformat()
+                            },
+                            websocket
+                        )
+                
+                elif message_type == "ping":
+                    # Handle ping/keepalive
+                    await ws_manager.send_personal_message(
+                        {
+                            "type": "pong",
+                            "timestamp": datetime.now().isoformat()
+                        },
+                        websocket
+                    )
+                
+                elif message_type == "get_active_users":
+                    # Send active users list
+                    await ws_manager.send_active_users(websocket, conversation_id)
+                
+                else:
+                    # Unknown message type
+                    await ws_manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "content": f"Unknown message type: {message_type}",
+                            "timestamp": datetime.now().isoformat()
+                        },
+                        websocket
+                    )
+            
+            except json.JSONDecodeError:
+                logger.error(f"Invalid JSON received from user {user.username}")
+                await ws_manager.send_personal_message(
+                    {
+                        "type": "error",
+                        "content": "Invalid message format. Expected JSON.",
+                        "timestamp": datetime.now().isoformat()
+                    },
+                    websocket
+                )
+            except Exception as e:
+                logger.error(f"Error processing message: {e}")
+                await ws_manager.send_personal_message(
+                    {
+                        "type": "error",
+                        "content": "Error processing message",
+                        "timestamp": datetime.now().isoformat()
+                    },
+                    websocket
+                )
+    
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for user {user.username}")
+        await ws_manager.disconnect(conversation_id, user.id)
+    except Exception as e:
+        logger.error(f"WebSocket error for user {user.username}: {e}")
+        await ws_manager.disconnect(conversation_id, user.id)

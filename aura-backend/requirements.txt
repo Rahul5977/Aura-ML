@@ -1,6 +1,6 @@
 # FastAPI and web framework dependencies
 fastapi==0.104.1
-uvicorn==0.24.0
+uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
 # Database and ORM
@@ -30,3 +30,4 @@ flake8==6.1.0   # Linting
 
 # Additional utilities
 email-validator==2.1.0  # For email validation in Pydantic
+websockets==12.0  # For WebSocket client testing
