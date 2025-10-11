@@ -22,7 +22,8 @@ async def create_user(user_data: UserCreate):
         data={
             "email": user_data.email,
             "username": user_data.username,
-            "hashed_password": hashed_password,
+            "password_hash": hashed_password,
+            "full_name": user_data.full_name,
         }
     )
     return user
@@ -53,7 +54,7 @@ async def authenticate_user(username: str, password: str):
     user = await get_user_by_username(username)
     if not user:
         return False
-    if not verify_password(password, user.hashed_password):
+    if not verify_password(password, user.password_hash):
         return False
     return user
 
@@ -88,13 +89,14 @@ async def get_conversation_by_id(conversation_id: str, user_id: str):
     return conversation
 
 # Message operations
-async def create_message(conversation_id: str, content: str, role: str):
+async def create_message(conversation_id: str, content: str, role: str, sender_id: Optional[str] = None):
     """Create a new message in a conversation."""
     message = await prisma.message.create(
         data={
             "conversation_id": conversation_id,
             "content": content,
             "role": role,
+            "sender_id": sender_id,
         }
     )
     return message
@@ -106,3 +108,32 @@ async def get_conversation_messages(conversation_id: str):
         order={"created_at": "asc"}
     )
     return messages
+
+async def update_user_profile(user_id: str, user_update):
+    """Update user profile information."""
+    # Build update data dynamically based on provided fields
+    update_data = {}
+    if hasattr(user_update, 'email') and user_update.email:
+        update_data['email'] = user_update.email
+    if hasattr(user_update, 'full_name') and user_update.full_name:
+        update_data['full_name'] = user_update.full_name
+    
+    if not update_data:
+        # No fields to update, return current user
+        return await get_user_by_id(user_id)
+    
+    updated_user = await prisma.user.update(
+        where={'id': user_id},
+        data=update_data
+    )
+    return updated_user
+
+async def update_user_password(user_id: str, new_password: str):
+    """Update user password with new hashed password."""
+    hashed_password = get_password_hash(new_password)
+    
+    await prisma.user.update(
+        where={'id': user_id},
+        data={'password_hash': hashed_password}
+    )
+    return True

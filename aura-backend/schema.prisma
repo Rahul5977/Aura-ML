@@ -11,15 +11,18 @@ datasource db {
 }
 
 model User {
-    id              String   @id @default(cuid())
-    email           String   @unique
-    username        String   @unique
-    hashed_password String
-    is_active       Boolean  @default(true)
-    created_at      DateTime @default(now())
-    updated_at      DateTime @updatedAt
+    id            String   @id @default(cuid())
+    email         String   @unique
+    username      String   @unique
+    password_hash String // Renamed from hashed_password for consistency
+    full_name     String // Added full_name field
+    is_active     Boolean  @default(true)
+    created_at    DateTime @default(now())
+    updated_at    DateTime @updatedAt
 
+    // Relations
     conversations Conversation[]
+    messages      Message[]      @relation("UserMessages")
 
     @@map("users")
 }
@@ -31,20 +34,34 @@ model Conversation {
     created_at DateTime @default(now())
     updated_at DateTime @updatedAt
 
+    // Relations
     user     User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
     messages Message[]
 
+    // Indexes for better performance
+    @@index([user_id])
+    @@index([created_at])
     @@map("conversations")
 }
 
 model Message {
-    id              String   @id @default(cuid())
+    id              String    @id @default(cuid())
     content         String
-    role            String // "user" or "assistant"
+    role            String // "user", "assistant", or "system"
     conversation_id String
-    created_at      DateTime @default(now())
+    sender_id       String? // Optional: ID of the user who sent this message
+    created_at      DateTime  @default(now())
+    updated_at      DateTime  @updatedAt
+    edited_at       DateTime? // Track if/when message was edited
+    read_status     Boolean   @default(false) // Track if message has been read
 
+    // Relations
     conversation Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+    sender       User?        @relation("UserMessages", fields: [sender_id], references: [id], onDelete: SetNull)
 
+    // Indexes for better performance
+    @@index([conversation_id])
+    @@index([created_at])
+    @@index([sender_id])
     @@map("messages")
 }
