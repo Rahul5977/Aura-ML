@@ -4,7 +4,7 @@ Handles model loading and emotion inference
 """
 
 import torch
-from transformers import Wav2Vec2ForSequenceClassification, Wav2Vec2Processor
+from transformers import Wav2Vec2ForSequenceClassification, Wav2Vec2FeatureExtractor
 import numpy as np
 from typing import Optional, Dict, List
 import logging
@@ -31,15 +31,15 @@ class EmotionRecognitionService:
         "surprise"
     ]
     
-    def __init__(self, model_name: str = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"):
+    def __init__(self, model_name: str = "superb/wav2vec2-base-superb-er"):
         """
         Initialize emotion recognition service.
         
         Args:
             model_name: Hugging Face model identifier
-                       Default: wav2vec2-lg-xlsr-en-speech-emotion-recognition
+                       Default: superb/wav2vec2-base-superb-er (SUPERB emotion recognition)
                        Alternative options:
-                       - "superb/wav2vec2-base-superb-er" (SUPERB emotion recognition)
+                       - "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
                        - "facebook/wav2vec2-large-xlsr-53"
         """
         self.model_name = model_name
@@ -53,14 +53,14 @@ class EmotionRecognitionService:
     
     def load_model(self) -> None:
         """
-        Load Wav2Vec2 emotion recognition model and processor.
+        Load Wav2Vec2 emotion recognition model and feature extractor.
         This is a blocking operation and should be called during startup.
         """
         try:
             logger.info(f"Loading emotion recognition model: {self.model_name}")
             
-            # Load processor and model
-            self.processor = Wav2Vec2Processor.from_pretrained(self.model_name)
+            # Load feature extractor and model (no tokenizer needed for classification)
+            self.processor = Wav2Vec2FeatureExtractor.from_pretrained(self.model_name)
             self.model = Wav2Vec2ForSequenceClassification.from_pretrained(self.model_name)
             
             # Move model to appropriate device
