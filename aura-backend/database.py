@@ -1,7 +1,7 @@
 from prisma import Prisma
 from typing import Optional
 from auth import get_password_hash, verify_password
-from schemas import UserCreate
+from schema_demo import UserCreate
 import asyncio
 
 prisma = Prisma()
