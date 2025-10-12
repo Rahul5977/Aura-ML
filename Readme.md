@@ -4,7 +4,7 @@
 
 Aura is a modern, real-time chat application built with FastAPI (backend) and React (frontend), featuring WebSocket-based communication, user authentication, and AI-powered conversations.
 
-## 🚀 Current Status: Week 3 COMPLETED ✅
+## 🚀 Current Status: Week 4.1 COMPLETED ✅
 
 ### Week 1: Project Setup & Database Design ✅
 
@@ -33,6 +33,19 @@ Aura is a modern, real-time chat application built with FastAPI (backend) and Re
 - **Active users tracking**
 - **Comprehensive test suite and interactive client**
 
+### Week 4.1: Real-Time Audio Transcription Pipeline ✅
+
+- **WebSocket audio endpoint** (`/ws/v1/audio`)
+- **Live audio streaming from clients**
+- **Per-client audio buffering system**
+- **OpenAI Whisper integration** (speech-to-text)
+- **Smart silence detection** (1.5s timeout triggers transcription)
+- **Audio preprocessing pipeline** (resampling, normalization)
+- **Support for WAV and PCM formats**
+- **Python test client** for audio streaming
+- **Async/await non-blocking processing**
+- **GPU/CPU automatic detection**
+
 ## 🔧 Tech Stack
 
 ### Backend
@@ -43,6 +56,10 @@ Aura is a modern, real-time chat application built with FastAPI (backend) and Re
 - **PostgreSQL**: Relational database
 - **JWT**: Authentication tokens
 - **WebSockets**: Real-time bidirectional communication
+- **OpenAI Whisper**: State-of-the-art speech recognition
+- **PyTorch**: Deep learning framework
+- **Librosa**: Audio processing library
+- **Transformers**: Hugging Face model hub
 
 ## 🚀 Quick Start
 
@@ -51,20 +68,34 @@ Aura is a modern, real-time chat application built with FastAPI (backend) and Re
 docker-compose up --build
 
 # Backend API: http://localhost:8000
-# WebSocket: ws://localhost:8000/ws/conversations/{id}
+# WebSocket Chat: ws://localhost:8000/ws/conversations/{id}
+# WebSocket Audio: ws://localhost:8000/ws/v1/audio
 ```
 
-## 📡 WebSocket Chat
+## 📡 Features
 
-### Quick Test
+### Real-time Chat
 
 ```bash
+# Interactive chat client
 docker exec -it ml_proj-backend-1 python interactive_chat_client.py username password
 ```
 
-See [WEBSOCKET_QUICKSTART.md](WEBSOCKET_QUICKSTART.md) and [WEEK3_COMPLETION_REPORT.md](WEEK3_COMPLETION_REPORT.md) for details.
+See [WEBSOCKET_QUICKSTART.md](WEBSOCKET_QUICKSTART.md) for details.
+
+### Audio Transcription
+
+```bash
+# Test audio transcription
+docker exec -it ml_proj-backend-1 python test_audio_client.py \
+  --username testuser \
+  --password testpass \
+  --audio sample.wav
+```
+
+See [WEEK4_1_AUDIO_TRANSCRIPTION.md](WEEK4_1_AUDIO_TRANSCRIPTION.md) for complete documentation.
 
 ---
 
-**Last Updated**: October 11, 2025  
-**Status**: Week 3 Complete - Real-time Chat Fully Functional ✅
+**Last Updated**: October 12, 2025  
+**Status**: Week 4.1 Complete - Real-time Audio Transcription Functional ✅
