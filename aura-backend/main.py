@@ -5,10 +5,17 @@ import os
 from dotenv import load_dotenv
 import json
 import logging
+import asyncio
 
 # Import from existing working modules
 from auth import create_access_token, verify_token, verify_password, ACCESS_TOKEN_EXPIRE_MINUTES
 from websocket_manager import manager as ws_manager
+from audio import (
+    audio_buffer_manager,
+    transcription_service,
+    initialize_transcription_service,
+    preprocess_audio_for_whisper
+)
 from database import (
     connect_db, disconnect_db, create_user, authenticate_user, 
     get_user_by_id, get_user_by_username, get_user_by_email,
@@ -36,6 +43,13 @@ security = HTTPBearer()
 @app.on_event("startup")
 async def startup():
     await connect_db()
+    # Initialize transcription service in background
+    try:
+        initialize_transcription_service()
+        logger.info("✅ Transcription service loaded successfully")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to load transcription service: {e}")
+        logger.info("Audio transcription will not be available")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -428,3 +442,166 @@ async def websocket_endpoint(
     except Exception as e:
         logger.error(f"WebSocket error for user {user.username}: {e}")
         await ws_manager.disconnect(conversation_id, user.id)
+
+# ============================================================================
+# WebSocket Audio Endpoint for Real-time Transcription
+# ============================================================================
+
+@app.websocket("/ws/v1/audio")
+async def audio_websocket_endpoint(
+    websocket: WebSocket,
+    token: str = Query(...)
+):
+    """
+    WebSocket endpoint for real-time audio transcription.
+    
+    Accepts binary audio data chunks, buffers them, and transcribes
+    when end-of-speech is detected (silence timeout).
+    
+    Args:
+        websocket: WebSocket connection
+        token: JWT authentication token (query parameter)
+    
+    Audio Format Expected:
+        - WAV format (preferred) or raw PCM
+        - Sample rate: 16kHz (will be resampled if different)
+        - Channels: Mono (stereo will be converted)
+        - Bit depth: 16-bit
+    
+    Message Format (Server to Client):
+        {
+            "type": "transcription" | "status" | "error",
+            "text": "transcribed text",
+            "duration": 2.5,  # audio duration in seconds
+            "timestamp": "ISO 8601 timestamp"
+        }
+    """
+    # Verify token and get user
+    try:
+        token_data = verify_token(token)
+        user = await get_user_by_id(token_data["user_id"])
+        if not user:
+            await websocket.close(code=1008, reason="Invalid authentication token")
+            return
+    except Exception as e:
+        logger.error(f"Audio WebSocket authentication failed: {e}")
+        await websocket.close(code=1008, reason="Authentication failed")
+        return
+    
+    # Accept WebSocket connection
+    await websocket.accept()
+    
+    # Create audio buffer for this user
+    buffer = audio_buffer_manager.create_buffer(user.id)
+    
+    # Send connection confirmation
+    await websocket.send_json({
+        "type": "status",
+        "content": "Connected to audio transcription service",
+        "user_id": user.id,
+        "username": user.username,
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    logger.info(f"User {user.username} ({user.id}) connected to audio WebSocket")
+    
+    # Define transcription callback for silence timeout
+    async def transcription_callback(user_id: str, audio_data: bytes):
+        """Called when silence timeout is detected"""
+        try:
+            logger.info(f"Processing audio for user {user_id}: {len(audio_data)} bytes")
+            
+            # Send processing status
+            await websocket.send_json({
+                "type": "status",
+                "content": "Processing audio...",
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            # Preprocess audio
+            audio_array = preprocess_audio_for_whisper(audio_data, sample_rate=16000)
+            
+            if audio_array is None or len(audio_array) == 0:
+                await websocket.send_json({
+                    "type": "error",
+                    "content": "Failed to process audio data",
+                    "timestamp": datetime.now().isoformat()
+                })
+                return
+            
+            # Calculate duration
+            duration = len(audio_array) / 16000
+            logger.info(f"Audio duration: {duration:.2f} seconds")
+            
+            # Skip very short audio (less than 0.3 seconds)
+            if duration < 0.3:
+                logger.info(f"Audio too short ({duration:.2f}s), skipping transcription")
+                return
+            
+            # Transcribe audio
+            result = await transcription_service.transcribe_audio(audio_array, language="en")
+            
+            transcribed_text = result.get("text", "")
+            
+            if transcribed_text:
+                # Send transcription result
+                await websocket.send_json({
+                    "type": "transcription",
+                    "text": transcribed_text,
+                    "duration": duration,
+                    "language": result.get("language", "en"),
+                    "timestamp": datetime.now().isoformat()
+                })
+                
+                logger.info(f"Transcription for {user.username}: '{transcribed_text}'")
+            else:
+                # No speech detected or transcription failed
+                await websocket.send_json({
+                    "type": "status",
+                    "content": "No speech detected in audio",
+                    "timestamp": datetime.now().isoformat()
+                })
+        
+        except Exception as e:
+            logger.error(f"Error in transcription callback: {e}")
+            await websocket.send_json({
+                "type": "error",
+                "content": f"Transcription error: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            })
+    
+    # Start monitoring buffer for silence timeout
+    monitor_task = asyncio.create_task(
+        audio_buffer_manager._monitor_buffers(transcription_callback)
+    )
+    
+    try:
+        while True:
+            # Receive audio chunk (binary data)
+            data = await websocket.receive_bytes()
+            
+            # Add chunk to buffer
+            buffer.add_chunk(data)
+            
+            logger.debug(f"Received audio chunk from {user.username}: {len(data)} bytes")
+    
+    except WebSocketDisconnect:
+        logger.info(f"Audio WebSocket disconnected for user {user.username}")
+    except Exception as e:
+        logger.error(f"Audio WebSocket error for user {user.username}: {e}")
+    finally:
+        # Cleanup
+        monitor_task.cancel()
+        try:
+            await monitor_task
+        except asyncio.CancelledError:
+            pass
+        
+        # Process any remaining audio in buffer
+        if buffer.has_data():
+            final_audio = buffer.get_buffer()
+            await transcription_callback(user.id, final_audio)
+        
+        # Remove buffer
+        audio_buffer_manager.remove_buffer(user.id)
+        logger.info(f"Cleaned up audio resources for user {user.username}")
