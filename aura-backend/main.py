@@ -14,6 +14,8 @@ from audio import (
     audio_buffer_manager,
     transcription_service,
     initialize_transcription_service,
+    emotion_service,
+    initialize_emotion_service,
     preprocess_audio_for_whisper
 )
 from database import (
@@ -23,7 +25,7 @@ from database import (
     create_message, get_conversation_messages,
     update_user_profile, update_user_password
 )
-from schemas import (
+from schema_demo import (
     UserCreate, UserResponse, UserLogin, Token,
     ConversationCreate, ConversationResponse,
     MessageCreate, MessageResponse,
@@ -50,6 +52,14 @@ async def startup():
     except Exception as e:
         logger.error(f"⚠️  Failed to load transcription service: {e}")
         logger.info("Audio transcription will not be available")
+    
+    # Initialize emotion recognition service
+    try:
+        initialize_emotion_service()
+        logger.info("✅ Emotion recognition service loaded successfully")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to load emotion recognition service: {e}")
+        logger.info("Audio emotion recognition will not be available")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -538,24 +548,88 @@ async def audio_websocket_endpoint(
                 logger.info(f"Audio too short ({duration:.2f}s), skipping transcription")
                 return
             
-            # Transcribe audio
-            result = await transcription_service.transcribe_audio(audio_array, language="en")
+            # Run STT and SER in parallel for faster processing
+            start_time = datetime.now()
             
-            transcribed_text = result.get("text", "")
-            
-            if transcribed_text:
-                # Send transcription result
+            try:
+                # Run transcription and emotion recognition concurrently
+                transcription_task = transcription_service.transcribe_audio(audio_array, language="en")
+                emotion_task = emotion_service.recognize_emotion(audio_array, sampling_rate=16000, return_all_scores=True)
+                
+                # Wait for both tasks to complete
+                transcription_result, emotion_result = await asyncio.gather(
+                    transcription_task,
+                    emotion_task,
+                    return_exceptions=True
+                )
+                
+                # Handle transcription errors
+                if isinstance(transcription_result, Exception):
+                    logger.error(f"Transcription error: {transcription_result}")
+                    transcription_result = {
+                        "text": "",
+                        "language": "en",
+                        "error": str(transcription_result)
+                    }
+                
+                # Handle emotion recognition errors
+                if isinstance(emotion_result, Exception):
+                    logger.error(f"Emotion recognition error: {emotion_result}")
+                    emotion_result = {
+                        "emotion": "unknown",
+                        "confidence": 0.0,
+                        "error": str(emotion_result)
+                    }
+                
+            except Exception as e:
+                logger.error(f"Error during parallel processing: {e}")
                 await websocket.send_json({
-                    "type": "transcription",
-                    "text": transcribed_text,
-                    "duration": duration,
-                    "language": result.get("language", "en"),
+                    "type": "error",
+                    "content": f"Processing error: {str(e)}",
                     "timestamp": datetime.now().isoformat()
                 })
+                return
+            
+            processing_time = (datetime.now() - start_time).total_seconds()
+            
+            transcribed_text = transcription_result.get("text", "")
+            
+            # Build unified response
+            response = {
+                "type": "analysis",
+                "transcript": {
+                    "text": transcribed_text,
+                    "language": transcription_result.get("language", "en"),
+                },
+                "emotion": {
+                    "primary": emotion_result.get("emotion", "unknown"),
+                    "confidence": emotion_result.get("confidence", 0.0),
+                    "all_scores": emotion_result.get("all_scores", {})
+                },
+                "audio": {
+                    "duration": duration,
+                    "sample_rate": 16000
+                },
+                "processing": {
+                    "total_time_ms": int(processing_time * 1000),
+                    "transcription_time_ms": transcription_result.get("inference_time_ms", 0),
+                    "emotion_time_ms": emotion_result.get("inference_time_ms", 0)
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Only send if we have meaningful results
+            if transcribed_text or emotion_result.get("emotion") != "unknown":
+                await websocket.send_json(response)
                 
-                logger.info(f"Transcription for {user.username}: '{transcribed_text}'")
+                logger.info(
+                    f"Analysis for {user.username}: "
+                    f"'{transcribed_text}' | Emotion: {emotion_result.get('emotion')} "
+                    f"({emotion_result.get('confidence', 0):.2f}) | "
+                    f"Processing: {processing_time*1000:.0f}ms"
+                )
             else:
-                # No speech detected or transcription failed
+                # No speech detected or both services failed
                 await websocket.send_json({
                     "type": "status",
                     "content": "No speech detected in audio",
@@ -566,7 +640,7 @@ async def audio_websocket_endpoint(
             logger.error(f"Error in transcription callback: {e}")
             await websocket.send_json({
                 "type": "error",
-                "content": f"Transcription error: {str(e)}",
+                "content": f"Analysis error: {str(e)}",
                 "timestamp": datetime.now().isoformat()
             })
     

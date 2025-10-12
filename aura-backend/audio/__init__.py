@@ -1,5 +1,5 @@
 """
-Audio transcription module for real-time speech-to-text
+Audio transcription and emotion recognition module for real-time speech processing
 """
 
 from .audio_utils import (
@@ -11,6 +11,7 @@ from .audio_utils import (
 )
 from .buffer_manager import AudioBufferManager, audio_buffer_manager
 from .transcription import TranscriptionService, transcription_service, initialize_transcription_service
+from .emotion import EmotionRecognitionService, emotion_service, initialize_emotion_service, recognize_emotion_from_audio
 
 __all__ = [
     'preprocess_audio_for_whisper',
@@ -23,4 +24,8 @@ __all__ = [
     'TranscriptionService',
     'transcription_service',
     'initialize_transcription_service',
+    'EmotionRecognitionService',
+    'emotion_service',
+    'initialize_emotion_service',
+    'recognize_emotion_from_audio',
 ]

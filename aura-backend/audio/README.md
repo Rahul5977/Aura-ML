@@ -1,14 +1,16 @@
-# Audio Transcription Module
+# Audio Processing Module
 
-Real-time speech-to-text transcription using OpenAI Whisper.
+Real-time speech-to-text transcription and emotion recognition using OpenAI Whisper and Wav2Vec2.
 
 ## Overview
 
-This module provides a complete audio processing pipeline for real-time transcription:
+This module provides a complete multi-modal audio processing pipeline:
 
+- **Speech-to-Text (STT)**: OpenAI Whisper for accurate transcription
+- **Speech Emotion Recognition (SER)**: Wav2Vec2 for 7-class emotion detection
+- **Parallel Processing**: STT and SER run concurrently for optimal performance
 - Audio format conversion and preprocessing
 - Per-client audio buffering with silence detection
-- OpenAI Whisper integration for accurate STT
 - Async/await support for non-blocking operations
 
 ## Quick Start
@@ -17,12 +19,15 @@ This module provides a complete audio processing pipeline for real-time transcri
 from audio import (
     audio_buffer_manager,
     transcription_service,
+    emotion_service,
     initialize_transcription_service,
+    initialize_emotion_service,
     preprocess_audio_for_whisper
 )
 
-# 1. Initialize transcription service (at startup)
+# 1. Initialize services (at startup)
 initialize_transcription_service()
+initialize_emotion_service()
 
 # 2. Create buffer for a user
 buffer = audio_buffer_manager.create_buffer(user_id="user_123")
@@ -37,9 +42,15 @@ if buffer.is_silent_timeout():
     # 5. Preprocess audio
     audio_array = preprocess_audio_for_whisper(audio_data)
 
-    # 6. Transcribe
-    result = await transcription_service.transcribe_audio(audio_array)
-    print(result["text"])
+    # 6. Run STT and SER in parallel
+    import asyncio
+    stt_result, ser_result = await asyncio.gather(
+        transcription_service.transcribe_audio(audio_array),
+        emotion_service.recognize_emotion(audio_array)
+    )
+
+    print(f"Transcript: {stt_result['text']}")
+    print(f"Emotion: {ser_result['emotion']} ({ser_result['confidence']:.2f})")
 ```
 
 ## Module Structure
@@ -49,7 +60,8 @@ audio/
 ├── __init__.py           # Public API exports
 ├── audio_utils.py        # Audio preprocessing utilities
 ├── buffer_manager.py     # Client buffer management
-└── transcription.py      # Whisper STT service
+├── transcription.py      # Whisper STT service
+└── emotion.py            # Wav2Vec2 SER service (NEW in Week 4.2)
 ```
 
 ## Components
@@ -64,7 +76,7 @@ def preprocess_audio_for_whisper(
     sample_rate: int = 16000
 ) -> np.ndarray:
     """
-    Complete preprocessing pipeline for Whisper.
+    Complete preprocessing pipeline for Whisper and Wav2Vec2.
 
     - Converts bytes to numpy array
     - Handles WAV and raw PCM formats
@@ -247,6 +259,89 @@ initialize_transcription_service()
 result = await transcription_service.transcribe_audio(audio)
 ```
 
+### Emotion Recognition Service (`emotion.py`)
+
+**EmotionRecognitionService Class:**
+
+```python
+class EmotionRecognitionService:
+    """Wav2Vec2-based speech emotion recognition service."""
+
+    def __init__(self, model_name: str = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"):
+        """
+        Initialize service.
+
+        Model options:
+        - ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition (recommended)
+        - superb/wav2vec2-base-superb-er (alternative)
+        """
+
+    def load_model(self) -> None:
+        """
+        Load Wav2Vec2 model (blocking).
+        Call once during startup.
+        """
+
+    async def recognize_emotion(
+        self,
+        audio_array: np.ndarray,
+        sampling_rate: int = 16000,
+        return_all_scores: bool = False
+    ) -> Dict[str, any]:
+        """
+        Recognize emotion from audio (async, non-blocking).
+
+        Args:
+            audio_array: Audio as numpy array (16kHz, mono)
+            sampling_rate: Sample rate of audio (default: 16000)
+            return_all_scores: Return scores for all emotions
+
+        Returns:
+            {
+                "emotion": "happy",
+                "confidence": 0.87,
+                "timestamp": "ISO 8601 timestamp",
+                "inference_time_ms": 250,
+                "all_scores": {  # if return_all_scores=True
+                    "angry": 0.02,
+                    "disgust": 0.01,
+                    "fear": 0.03,
+                    "happy": 0.87,
+                    "neutral": 0.05,
+                    "sad": 0.01,
+                    "surprise": 0.01
+                }
+            }
+        """
+
+    def get_emotion_labels(self) -> List[str]:
+        """Get list of supported emotions."""
+        # Returns: ["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
+```
+
+**Supported Emotions:**
+
+1. **angry** - Anger, frustration
+2. **disgust** - Disgust, revulsion
+3. **fear** - Fear, anxiety
+4. **happy** - Happiness, joy
+5. **neutral** - Neutral, calm
+6. **sad** - Sadness, sorrow
+7. **surprise** - Surprise, shock
+
+**Global Instance:**
+
+```python
+# Use this singleton instance
+from audio import emotion_service, initialize_emotion_service
+
+# At startup
+initialize_emotion_service()
+
+# In code
+result = await emotion_service.recognize_emotion(audio)
+```
+
 ## Usage Examples
 
 ### Basic Transcription
@@ -270,6 +365,87 @@ async def transcribe_file(file_path: str):
     print(f"Duration: {result['duration']:.2f}s")
 
 asyncio.run(transcribe_file("speech.wav"))
+```
+
+### Basic Emotion Recognition
+
+```python
+import asyncio
+from audio import emotion_service, preprocess_audio_for_whisper
+
+async def recognize_emotion_file(file_path: str):
+    # Load audio file
+    with open(file_path, 'rb') as f:
+        audio_bytes = f.read()
+
+    # Preprocess
+    audio_array = preprocess_audio_for_whisper(audio_bytes)
+
+    # Recognize emotion
+    result = await emotion_service.recognize_emotion(
+        audio_array,
+        return_all_scores=True
+    )
+
+    print(f"Emotion: {result['emotion']}")
+    print(f"Confidence: {result['confidence']:.2%}")
+    print(f"Inference time: {result['inference_time_ms']}ms")
+
+    print("\nAll emotion scores:")
+    for emotion, score in result['all_scores'].items():
+        print(f"  {emotion:10s}: {score:.2%}")
+
+asyncio.run(recognize_emotion_file("speech.wav"))
+```
+
+### Parallel STT + SER Processing (Recommended)
+
+```python
+import asyncio
+from audio import (
+    transcription_service,
+    emotion_service,
+    preprocess_audio_for_whisper
+)
+
+async def analyze_audio_file(file_path: str):
+    # Load and preprocess audio
+    with open(file_path, 'rb') as f:
+        audio_bytes = f.read()
+
+    audio_array = preprocess_audio_for_whisper(audio_bytes)
+
+    # Run STT and SER in parallel for faster processing
+    stt_result, ser_result = await asyncio.gather(
+        transcription_service.transcribe_audio(audio_array),
+        emotion_service.recognize_emotion(audio_array, return_all_scores=True)
+    )
+
+    # Build unified response
+    response = {
+        "transcript": {
+            "text": stt_result["text"],
+            "language": stt_result.get("language", "en")
+        },
+        "emotion": {
+            "primary": ser_result["emotion"],
+            "confidence": ser_result["confidence"],
+            "all_scores": ser_result["all_scores"]
+        },
+        "processing": {
+            "stt_time_ms": stt_result.get("inference_time_ms", 0),
+            "ser_time_ms": ser_result["inference_time_ms"]
+        }
+    }
+
+    print(f"Transcript: {response['transcript']['text']}")
+    print(f"Emotion: {response['emotion']['primary']} ({response['emotion']['confidence']:.2%})")
+    print(f"Processing: STT={response['processing']['stt_time_ms']}ms, "
+          f"SER={response['processing']['ser_time_ms']}ms")
+
+    return response
+
+asyncio.run(analyze_audio_file("speech.wav"))
 ```
 
 ### WebSocket Integration

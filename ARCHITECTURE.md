@@ -94,15 +94,24 @@ aura-backend/
 │  └─────────┘  └────────┘  └─────────────┘  └──────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │              audio/ module                            │   │
+│  │              audio/ module (Week 4.2)                 │   │
 │  │  ┌──────────────┐  ┌────────────────┐  ┌──────────┐ │   │
 │  │  │audio_utils.py│  │buffer_manager  │  │transcrip │ │   │
 │  │  │              │  │      .py       │  │ tion.py  │ │   │
 │  │  │- Preprocess  │  │                │  │          │ │   │
 │  │  │- Resample    │  │- AudioBuffer   │  │- Whisper │ │   │
-│  │  │- Normalize   │  │- BufferManager │  │- PyTorch │ │   │
+│  │  │- Normalize   │  │- BufferManager │  │- STT     │ │   │
 │  │  │- librosa     │  │- Timeout detect│  │- Async   │ │   │
 │  │  └──────────────┘  └────────────────┘  └──────────┘ │   │
+│  │                                                       │   │
+│  │  ┌──────────────┐                                    │   │
+│  │  │  emotion.py  │      NEW in Week 4.2               │   │
+│  │  │              │                                    │   │
+│  │  │- Wav2Vec2    │                                    │   │
+│  │  │- SER         │                                    │   │
+│  │  │- 7 emotions  │                                    │   │
+│  │  │- Parallel    │                                    │   │
+│  │  └──────────────┘                                    │   │
 │  └──────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -255,14 +264,31 @@ Start buffer monitoring
 │               └─► normalize()
 │               │
 │               ▼
-│           Transcribe (Whisper)
-│               │
-│               ├─► Load model (if not loaded)
-│               ├─► Generate transcription
-│               └─► Return text
-│               │
-│               ▼
+│           ┌──────────────┴──────────────┐
+│           │                             │
+│           ▼                             ▼
+│       Transcribe (Whisper)      Recognize Emotion (Wav2Vec2)
+│           │                             │
+│           ├─► Load model                ├─► Load model
+│           ├─► Generate transcript       ├─► Generate emotion scores
+│           └─► Return text               └─► Return emotion + confidence
+│           │                             │
+│           └──────────────┬──────────────┘
+│                          ▼
+│               asyncio.gather() - wait for both
+│                          │
+│                          ▼
+│               Aggregate results into unified JSON
+│                          │
+│                          ▼
 │           Send result to client (JSON)
+│               {
+│                 "type": "analysis",
+│                 "transcript": {...},
+│                 "emotion": {...},
+│                 "audio": {...},
+│                 "processing": {...}
+│               }
 │               │
 │               ▼
 └───────────── Clear buffer, continue
@@ -684,6 +710,13 @@ logger.debug("Buffer size: %d bytes", len(buffer))
 
 ---
 
-**Last Updated:** October 12, 2025  
-**Version:** 1.0.0 (Week 4.1)  
+**Last Updated:** January 15, 2024  
+**Version:** 1.1.0 (Week 4.2)  
 **Status:** Production Ready ✅
+
+**Week 4.2 Updates:**
+
+- Added Speech Emotion Recognition (SER) with Wav2Vec2
+- Implemented parallel STT + SER processing with asyncio.gather()
+- Updated audio flow diagram to show multi-modal analysis
+- Enhanced response format with transcript and emotion data
