@@ -27,15 +27,7 @@ RUN mkdir -p /app/.cache/huggingface
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download ML models to speed up container startup
-RUN python -c "from transformers import WhisperProcessor, WhisperForConditionalGeneration; \
-    WhisperProcessor.from_pretrained('openai/whisper-tiny'); \
-    WhisperForConditionalGeneration.from_pretrained('openai/whisper-tiny')" && \
-    python -c "from transformers import Wav2Vec2Processor, Wav2Vec2ForSequenceClassification; \
-    Wav2Vec2Processor.from_pretrained('ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition'); \
-    Wav2Vec2ForSequenceClassification.from_pretrained('ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition')"
-
-# Copy application code
+# Copy application code first
 COPY . .
 
 # Generate Prisma client

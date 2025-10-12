@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query, File, UploadFile
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import timedelta, datetime
 import os
@@ -237,6 +237,99 @@ async def change_password(
 async def logout(current_user = Depends(get_current_user)):
     """Logout user (client should discard the JWT token)."""
     return {"message": "Logged out successfully"}
+
+# ============================================================================
+# Audio Processing REST Endpoints
+# ============================================================================
+
+@app.post("/transcribe")
+async def transcribe_audio_file(
+    file: UploadFile = File(...),
+    current_user = Depends(get_current_user)
+):
+    """
+    Transcribe an audio file using Whisper.
+    
+    Supports WAV, MP3, and other common audio formats.
+    """
+    if not transcription_service.is_loaded:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Transcription service not available"
+        )
+    
+    try:
+        # Read audio file
+        audio_bytes = await file.read()
+        
+        # Preprocess audio
+        audio_array = preprocess_audio_for_whisper(audio_bytes)
+        if audio_array is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to process audio file"
+            )
+        
+        # Transcribe (Whisper expects 16kHz audio)
+        sample_rate = 16000
+        result = await transcription_service.transcribe_audio(audio_array)
+        
+        return {
+            "text": result["text"],
+            "language": result.get("language", "en"),
+            "duration": len(audio_array) / sample_rate,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Transcription error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Transcription failed: {str(e)}"
+        )
+
+@app.post("/recognize-emotion")
+async def recognize_emotion_file(
+    file: UploadFile = File(...),
+    current_user = Depends(get_current_user)
+):
+    """
+    Recognize emotion from an audio file.
+    
+    Supports WAV, MP3, and other common audio formats.
+    """
+    if not emotion_service.is_loaded:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Emotion recognition service not available"
+        )
+    
+    try:
+        # Read audio file
+        audio_bytes = await file.read()
+        
+        # Preprocess audio
+        audio_array = preprocess_audio_for_whisper(audio_bytes)
+        if audio_array is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to process audio file"
+            )
+        
+        # Recognize emotion (model expects 16kHz audio)
+        sample_rate = 16000
+        result = await emotion_service.recognize_emotion(
+            audio_array, 
+            sample_rate,
+            return_all_scores=True
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Emotion recognition error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Emotion recognition failed: {str(e)}"
+        )
 
 # ============================================================================
 # WebSocket Endpoints for Real-time Chat
