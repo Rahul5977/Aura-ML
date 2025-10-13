@@ -1,27 +1,30 @@
 # Aura ML Project - Test Results
 
 ## Test Execution Summary
+
 **Date:** October 12, 2025  
 **Status:** ✅ ALL TESTS PASSED
 
 ## Test Coverage
 
 ### 1. Health Endpoint ✅
+
 - **Endpoint:** `GET /health`
 - **Status:** Working
 - **Response:** `{"status": "ok"}`
 
 ### 2. User Authentication (Week 3) ✅
+
 - **Registration Endpoint:** `POST /auth/register`
   - Status: Working (201 Created)
   - Requires: email, username, full_name, password
-  
 - **Login Endpoint:** `POST /auth/login`
   - Status: Working (200 OK)
   - Requires: username (or email), password
   - Returns: JWT access token for authenticated requests
 
 ### 3. Audio Transcription (Week 3) ✅
+
 - **Endpoint:** `POST /transcribe`
 - **Status:** Working (200 OK)
 - **Authentication:** Required (Bearer token)
@@ -39,6 +42,7 @@
 - **Test Result:** Successfully transcribed 2-second test audio file
 
 ### 4. Emotion Recognition (Week 4.1) ✅
+
 - **Endpoint:** `POST /recognize-emotion`
 - **Status:** Working (200 OK)
 - **Authentication:** Required (Bearer token)
@@ -64,6 +68,7 @@
 - **Performance:** ~543ms inference time
 
 ### 5. WebSocket Endpoint (Week 4.2) ✅
+
 - **Endpoint:** `ws://localhost:8000/ws/audio`
 - **Status:** Available
 - **Purpose:** Real-time audio streaming and processing
@@ -72,21 +77,23 @@
 ## Technical Details
 
 ### Docker Services
+
 - **Backend:** Running on port 8000
 - **Database:** PostgreSQL 15 on port 5432
 - **Frontend:** Node.js on port 3000
 
 ### ML Models
+
 1. **Transcription:** OpenAI Whisper (whisper-tiny)
    - Supports multiple audio formats
    - Outputs text and detected language
-   
 2. **Emotion Recognition:** Wav2Vec2 (superb/wav2vec2-base-superb-er)
    - Detects 4 emotions: angry, disgust, fear, happy
    - Returns confidence scores for all emotions
    - Fast inference (~500ms)
 
 ### Audio Processing Pipeline
+
 1. Audio file upload via REST endpoint
 2. Preprocessing: Convert to 16kHz mono audio
 3. Model inference (Whisper or Wav2Vec2)
@@ -95,10 +102,12 @@
 ## Issues Fixed During Testing
 
 1. **Authentication Schema Mismatch**
+
    - Fixed registration/login data structure
    - Updated to use proper fields: `username`, `email`, `full_name`, `password`
 
 2. **Audio Preprocessing**
+
    - Fixed unpacking error in `preprocess_audio_for_whisper`
    - Function returns only audio_array, not tuple
    - Added proper null checking
@@ -108,11 +117,14 @@
    - Ensured proper async/await handling
 
 ## API Documentation
+
 FastAPI auto-generated docs available at:
+
 - **Swagger UI:** http://localhost:8000/docs
 - **ReDoc:** http://localhost:8000/redoc
 
 ## Next Steps (Optional)
+
 1. Build a real frontend to replace the placeholder
 2. Add more comprehensive WebSocket testing
 3. Implement additional emotion categories
@@ -122,7 +134,9 @@ FastAPI auto-generated docs available at:
 7. Enhance error handling and logging
 
 ## Conclusion
+
 All core features for Week 3, Week 4.1, and Week 4.2 are working correctly:
+
 - ✅ User authentication with JWT tokens
 - ✅ Audio transcription using Whisper
 - ✅ Emotion recognition using Wav2Vec2

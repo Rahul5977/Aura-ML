@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query, File, UploadFile
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import timedelta, datetime
+from typing import Optional
 import os
 from dotenv import load_dotenv
 import json
@@ -17,6 +18,16 @@ from audio import (
     emotion_service,
     initialize_emotion_service,
     preprocess_audio_for_whisper
+)
+# Week 5: Contextual Analysis imports
+from contextual import (
+    contextual_analyzer,
+    initialize_contextual_services
+)
+# Week 6: Chat Orchestrator import
+from chat_orchestrator import (
+    chat_orchestrator,
+    initialize_chat_orchestrator
 )
 from database import (
     connect_db, disconnect_db, create_user, authenticate_user, 
@@ -60,6 +71,26 @@ async def startup():
     except Exception as e:
         logger.error(f"⚠️  Failed to load emotion recognition service: {e}")
         logger.info("Audio emotion recognition will not be available")
+    
+    # Week 5: Initialize contextual analysis services
+    try:
+        await initialize_contextual_services()
+        logger.info("✅ Contextual analysis services loaded successfully")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to load contextual analysis services: {e}")
+        logger.info("Contextual analysis will not be available")
+    
+    # Week 6: Initialize chat orchestrator
+    try:
+        initialize_chat_orchestrator(
+            transcription_service=transcription_service,
+            emotion_service=emotion_service,
+            contextual_analyzer=contextual_analyzer
+        )
+        logger.info("✅ Chat orchestrator initialized successfully")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to initialize chat orchestrator: {e}")
+        logger.info("Chat orchestrator will not be available")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -329,6 +360,221 @@ async def recognize_emotion_file(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Emotion recognition failed: {str(e)}"
+        )
+
+# ============================================================================
+# Week 5: Contextual Analysis REST Endpoints
+# ============================================================================
+
+@app.post("/analyze/text")
+async def analyze_text(
+    text: str,
+    conversation_id: str,
+    speaker_id: Optional[str] = None,
+    include_graph: bool = True,
+    current_user = Depends(get_current_user)
+):
+    """
+    Perform comprehensive contextual analysis on text.
+    
+    Extracts:
+    - Named entities (people, places, organizations, concepts)
+    - Emotional context (using COMET)
+    - Knowledge graph updates
+    
+    **Week 5 Feature**
+    """
+    if not contextual_analyzer.is_ready():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Contextual analysis services not available"
+        )
+    
+    try:
+        result = await contextual_analyzer.analyze(
+            text=text,
+            conversation_id=conversation_id,
+            speaker_id=speaker_id or str(current_user.id),
+            include_graph_updates=include_graph
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Contextual analysis error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Contextual analysis failed: {str(e)}"
+        )
+
+@app.get("/analyze/conversation/{conversation_id}")
+async def get_conversation_context(
+    conversation_id: str,
+    current_user = Depends(get_current_user)
+):
+    """
+    Get accumulated contextual knowledge for a conversation.
+    
+    Returns entities, emotions, and relationships from the knowledge graph.
+    
+    **Week 5 Feature**
+    """
+    try:
+        context = await contextual_analyzer.get_conversation_context(conversation_id)
+        return context
+    except Exception as e:
+        logger.error(f"Error getting conversation context: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get conversation context: {str(e)}"
+        )
+
+@app.get("/knowledge-graph/summary")
+async def get_knowledge_graph_summary(
+    current_user = Depends(get_current_user)
+):
+    """
+    Get summary statistics of the knowledge graph.
+    
+    Returns counts of nodes and relationships by type.
+    
+    **Week 5 Feature**
+    """
+    try:
+        from contextual import knowledge_graph_service
+        summary = await knowledge_graph_service.get_graph_summary()
+        return summary
+    except Exception as e:
+        logger.error(f"Error getting graph summary: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get graph summary: {str(e)}"
+        )
+
+@app.get("/knowledge-graph/export")
+async def export_knowledge_graph(
+    format: str = "json",
+    current_user = Depends(get_current_user)
+):
+    """
+    Export the knowledge graph in various formats.
+    
+    Supported formats: json
+    
+    **Week 5 Feature**
+    """
+    try:
+        from contextual import knowledge_graph_service
+        graph_data = await knowledge_graph_service.export_graph(format=format)
+        
+        return {
+            "format": format,
+            "data": graph_data
+        }
+    except Exception as e:
+        logger.error(f"Error exporting graph: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export graph: {str(e)}"
+        )
+
+# ============================================================================
+# Week 6: Chat Orchestrator Endpoint - Unified AI Pipeline
+# ============================================================================
+
+@app.post("/orchestrate/analyze-audio")
+async def orchestrate_audio_analysis(
+    file: UploadFile = File(...),
+    conversation_id: str = Query(..., description="Conversation identifier"),
+    speaker_id: Optional[str] = Query(None, description="Speaker identifier"),
+    include_graph: bool = Query(True, description="Update knowledge graph"),
+    current_user = Depends(get_current_user)
+):
+    """
+    **Week 6: Chat Orchestrator - Unified AI Pipeline**
+    
+    Process audio through the complete AI pipeline in a single request:
+    1. Speech-to-Text (STT) - Transcribe audio with Whisper
+    2. Speech Emotion Recognition (SER) - Detect emotion with Wav2Vec2
+    3. Named Entity Recognition (NER) - Extract entities with spaCy
+    4. Commonsense Reasoning (COMET) - Infer emotional context
+    5. Knowledge Graph - Update graph with results
+    
+    **Input:** Audio file (WAV, MP3, etc.)
+    
+    **Output:** Aggregated JSON response with:
+    - Transcript (text, language)
+    - Emotion (from audio and text)
+    - Entities (people, places, organizations, concepts)
+    - Commonsense inferences (feelings, wants, effects)
+    - Knowledge graph updates
+    - Processing metrics
+    
+    **Example Response:**
+    ```json
+    {
+      "transcript": {
+        "text": "I'm meeting Sarah at the coffee shop in Mumbai tomorrow.",
+        "language": "en"
+      },
+      "emotion": {
+        "from_audio": {"primary": "neutral", "confidence": 0.85},
+        "from_text": {"detected": ["hopeful", "excited"]}
+      },
+      "entities": {
+        "people": [{"text": "Sarah", "start": 13, "end": 18}],
+        "places": [{"text": "Mumbai", "start": 42, "end": 48}],
+        "dates": [{"text": "tomorrow", "start": 49, "end": 57}]
+      },
+      "commonsense": {
+        "inferences": {
+          "subject": {
+            "feelings": ["interested", "hopeful"],
+            "wants": ["to meet friend", "to have coffee"]
+          }
+        }
+      },
+      "processing": {
+        "total_time_ms": 650,
+        "all_models_completed": true
+      }
+    }
+    ```
+    """
+    if not chat_orchestrator or not chat_orchestrator.is_ready():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Chat orchestrator service not available"
+        )
+    
+    try:
+        # Read audio file
+        audio_bytes = await file.read()
+        
+        # Validate audio file
+        if not audio_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Empty audio file"
+            )
+        
+        # Process through orchestrator
+        result = await chat_orchestrator.process_audio(
+            audio_bytes=audio_bytes,
+            conversation_id=conversation_id,
+            speaker_id=speaker_id or str(current_user.id),
+            sample_rate=16000,
+            include_graph_updates=include_graph
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Chat orchestrator error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Audio analysis failed: {str(e)}"
         )
 
 # ============================================================================
