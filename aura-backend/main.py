@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query, File, UploadFile
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import timedelta, datetime
+from typing import Optional
 import os
 from dotenv import load_dotenv
 import json
@@ -17,6 +18,11 @@ from audio import (
     emotion_service,
     initialize_emotion_service,
     preprocess_audio_for_whisper
+)
+# Week 5: Contextual Analysis imports
+from contextual import (
+    contextual_analyzer,
+    initialize_contextual_services
 )
 from database import (
     connect_db, disconnect_db, create_user, authenticate_user, 
@@ -60,6 +66,22 @@ async def startup():
     except Exception as e:
         logger.error(f"⚠️  Failed to load emotion recognition service: {e}")
         logger.info("Audio emotion recognition will not be available")
+    
+    # Week 5: Initialize contextual analysis services
+    try:
+        await initialize_contextual_services()
+        logger.info("✅ Contextual analysis services loaded successfully")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to load contextual analysis services: {e}")
+        logger.info("Contextual analysis will not be available")
+    
+    # Initialize contextual analysis service
+    try:
+        initialize_contextual_services()
+        logger.info("✅ Contextual analysis service loaded successfully")
+    except Exception as e:
+        logger.error(f"⚠️  Failed to load contextual analysis service: {e}")
+        logger.info("Contextual analysis will not be available")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -329,6 +351,121 @@ async def recognize_emotion_file(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Emotion recognition failed: {str(e)}"
+        )
+
+# ============================================================================
+# Week 5: Contextual Analysis REST Endpoints
+# ============================================================================
+
+@app.post("/analyze/text")
+async def analyze_text(
+    text: str,
+    conversation_id: str,
+    speaker_id: Optional[str] = None,
+    include_graph: bool = True,
+    current_user = Depends(get_current_user)
+):
+    """
+    Perform comprehensive contextual analysis on text.
+    
+    Extracts:
+    - Named entities (people, places, organizations, concepts)
+    - Emotional context (using COMET)
+    - Knowledge graph updates
+    
+    **Week 5 Feature**
+    """
+    if not contextual_analyzer.is_ready():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Contextual analysis services not available"
+        )
+    
+    try:
+        result = await contextual_analyzer.analyze(
+            text=text,
+            conversation_id=conversation_id,
+            speaker_id=speaker_id or str(current_user.id),
+            include_graph_updates=include_graph
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Contextual analysis error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Contextual analysis failed: {str(e)}"
+        )
+
+@app.get("/analyze/conversation/{conversation_id}")
+async def get_conversation_context(
+    conversation_id: str,
+    current_user = Depends(get_current_user)
+):
+    """
+    Get accumulated contextual knowledge for a conversation.
+    
+    Returns entities, emotions, and relationships from the knowledge graph.
+    
+    **Week 5 Feature**
+    """
+    try:
+        context = await contextual_analyzer.get_conversation_context(conversation_id)
+        return context
+    except Exception as e:
+        logger.error(f"Error getting conversation context: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get conversation context: {str(e)}"
+        )
+
+@app.get("/knowledge-graph/summary")
+async def get_knowledge_graph_summary(
+    current_user = Depends(get_current_user)
+):
+    """
+    Get summary statistics of the knowledge graph.
+    
+    Returns counts of nodes and relationships by type.
+    
+    **Week 5 Feature**
+    """
+    try:
+        from contextual import knowledge_graph_service
+        summary = await knowledge_graph_service.get_graph_summary()
+        return summary
+    except Exception as e:
+        logger.error(f"Error getting graph summary: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get graph summary: {str(e)}"
+        )
+
+@app.get("/knowledge-graph/export")
+async def export_knowledge_graph(
+    format: str = "json",
+    current_user = Depends(get_current_user)
+):
+    """
+    Export the knowledge graph in various formats.
+    
+    Supported formats: json
+    
+    **Week 5 Feature**
+    """
+    try:
+        from contextual import knowledge_graph_service
+        graph_data = await knowledge_graph_service.export_graph(format=format)
+        
+        return {
+            "format": format,
+            "data": graph_data
+        }
+    except Exception as e:
+        logger.error(f"Error exporting graph: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to export graph: {str(e)}"
         )
 
 # ============================================================================
