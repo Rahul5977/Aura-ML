@@ -799,17 +799,22 @@ async def websocket_endpoint(
 @app.websocket("/ws/v1/audio")
 async def audio_websocket_endpoint(
     websocket: WebSocket,
-    token: str = Query(...)
+    token: str = Query(...),
+    conversation_id: str = Query(...),
+    full_pipeline: bool = Query(default=True)
 ):
     """
-    WebSocket endpoint for real-time audio transcription.
+    WebSocket endpoint for real-time audio analysis with full AI pipeline.
     
-    Accepts binary audio data chunks, buffers them, and transcribes
-    when end-of-speech is detected (silence timeout).
+    Accepts binary audio data chunks, buffers them, and processes through
+    complete AI pipeline when end-of-speech is detected (silence timeout).
     
     Args:
         websocket: WebSocket connection
         token: JWT authentication token (query parameter)
+        conversation_id: ID of the conversation for context storage
+        full_pipeline: Whether to use full orchestration (STT+SER+NER+COMET+Graph+LLM)
+                      or basic mode (STT+SER only). Default: True
     
     Audio Format Expected:
         - WAV format (preferred) or raw PCM
@@ -819,9 +824,13 @@ async def audio_websocket_endpoint(
     
     Message Format (Server to Client):
         {
-            "type": "transcription" | "status" | "error",
-            "text": "transcribed text",
-            "duration": 2.5,  # audio duration in seconds
+            "type": "analysis" | "response" | "status" | "error",
+            "transcript": {...},
+            "emotion": {...},
+            "entities": {...},  # if full_pipeline=True
+            "commonsense": {...},  # if full_pipeline=True
+            "graph_updates": {...},  # if full_pipeline=True
+            "ai_response": {...},  # if full_pipeline=True
             "timestamp": "ISO 8601 timestamp"
         }
     """
@@ -837,6 +846,17 @@ async def audio_websocket_endpoint(
         await websocket.close(code=1008, reason="Authentication failed")
         return
     
+    # Verify conversation exists and user has access
+    try:
+        conversation = await get_conversation_by_id(conversation_id, user.id)
+        if not conversation:
+            await websocket.close(code=1008, reason="Conversation not found or access denied")
+            return
+    except Exception as e:
+        logger.error(f"Error accessing conversation: {e}")
+        await websocket.close(code=1008, reason="Error accessing conversation")
+        return
+    
     # Accept WebSocket connection
     await websocket.accept()
     
@@ -844,139 +864,283 @@ async def audio_websocket_endpoint(
     buffer = audio_buffer_manager.create_buffer(user.id)
     
     # Send connection confirmation
+    pipeline_mode = "Full AI Pipeline" if full_pipeline else "Basic (STT+SER)"
     await websocket.send_json({
         "type": "status",
-        "content": "Connected to audio transcription service",
+        "content": f"Connected to Aura AI - {pipeline_mode}",
         "user_id": user.id,
         "username": user.username,
+        "conversation_id": conversation_id,
+        "pipeline_mode": pipeline_mode,
         "timestamp": datetime.now().isoformat()
     })
     
-    logger.info(f"User {user.username} ({user.id}) connected to audio WebSocket")
+    logger.info(
+        f"User {user.username} ({user.id}) connected to audio WebSocket "
+        f"(conversation: {conversation_id}, mode: {pipeline_mode})"
+    )
     
-    # Define transcription callback for silence timeout
-    async def transcription_callback(user_id: str, audio_data: bytes):
-        """Called when silence timeout is detected"""
+    # Define audio processing callback for silence timeout
+    async def audio_processing_callback(user_id: str, audio_data: bytes):
+        """Called when silence timeout is detected - processes through full AI pipeline"""
         try:
             logger.info(f"Processing audio for user {user_id}: {len(audio_data)} bytes")
             
             # Send processing status
             await websocket.send_json({
                 "type": "status",
-                "content": "Processing audio...",
+                "content": "Processing audio through AI pipeline...",
                 "timestamp": datetime.now().isoformat()
             })
             
-            # Preprocess audio
-            audio_array = preprocess_audio_for_whisper(audio_data, sample_rate=16000)
-            
-            if audio_array is None or len(audio_array) == 0:
-                await websocket.send_json({
-                    "type": "error",
-                    "content": "Failed to process audio data",
-                    "timestamp": datetime.now().isoformat()
-                })
-                return
-            
-            # Calculate duration
-            duration = len(audio_array) / 16000
+            # Calculate duration first for validation
+            duration = len(audio_data) / 16000
             logger.info(f"Audio duration: {duration:.2f} seconds")
             
             # Skip very short audio (less than 0.3 seconds)
             if duration < 0.3:
-                logger.info(f"Audio too short ({duration:.2f}s), skipping transcription")
-                return
-            
-            # Run STT and SER in parallel for faster processing
-            start_time = datetime.now()
-            
-            try:
-                # Run transcription and emotion recognition concurrently
-                transcription_task = transcription_service.transcribe_audio(audio_array, language="en")
-                emotion_task = emotion_service.recognize_emotion(audio_array, sampling_rate=16000, return_all_scores=True)
-                
-                # Wait for both tasks to complete
-                transcription_result, emotion_result = await asyncio.gather(
-                    transcription_task,
-                    emotion_task,
-                    return_exceptions=True
-                )
-                
-                # Handle transcription errors
-                if isinstance(transcription_result, Exception):
-                    logger.error(f"Transcription error: {transcription_result}")
-                    transcription_result = {
-                        "text": "",
-                        "language": "en",
-                        "error": str(transcription_result)
-                    }
-                
-                # Handle emotion recognition errors
-                if isinstance(emotion_result, Exception):
-                    logger.error(f"Emotion recognition error: {emotion_result}")
-                    emotion_result = {
-                        "emotion": "unknown",
-                        "confidence": 0.0,
-                        "error": str(emotion_result)
-                    }
-                
-            except Exception as e:
-                logger.error(f"Error during parallel processing: {e}")
-                await websocket.send_json({
-                    "type": "error",
-                    "content": f"Processing error: {str(e)}",
-                    "timestamp": datetime.now().isoformat()
-                })
-                return
-            
-            processing_time = (datetime.now() - start_time).total_seconds()
-            
-            transcribed_text = transcription_result.get("text", "")
-            
-            # Build unified response
-            response = {
-                "type": "analysis",
-                "transcript": {
-                    "text": transcribed_text,
-                    "language": transcription_result.get("language", "en"),
-                },
-                "emotion": {
-                    "primary": emotion_result.get("emotion", "unknown"),
-                    "confidence": emotion_result.get("confidence", 0.0),
-                    "all_scores": emotion_result.get("all_scores", {})
-                },
-                "audio": {
-                    "duration": duration,
-                    "sample_rate": 16000
-                },
-                "processing": {
-                    "total_time_ms": int(processing_time * 1000),
-                    "transcription_time_ms": transcription_result.get("inference_time_ms", 0),
-                    "emotion_time_ms": emotion_result.get("inference_time_ms", 0)
-                },
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            # Only send if we have meaningful results
-            if transcribed_text or emotion_result.get("emotion") != "unknown":
-                await websocket.send_json(response)
-                
-                logger.info(
-                    f"Analysis for {user.username}: "
-                    f"'{transcribed_text}' | Emotion: {emotion_result.get('emotion')} "
-                    f"({emotion_result.get('confidence', 0):.2f}) | "
-                    f"Processing: {processing_time*1000:.0f}ms"
-                )
-            else:
-                # No speech detected or both services failed
+                logger.info(f"Audio too short ({duration:.2f}s), skipping analysis")
                 await websocket.send_json({
                     "type": "status",
-                    "content": "No speech detected in audio",
+                    "content": "Audio too short, waiting for more speech...",
                     "timestamp": datetime.now().isoformat()
                 })
+                return
+            
+            start_time = datetime.now()
+            
+            # ===================================================================
+            # FULL PIPELINE MODE: Use Chat Orchestrator
+            # ===================================================================
+            if full_pipeline and chat_orchestrator and chat_orchestrator.is_ready():
+                try:
+                    logger.info("Running FULL AI PIPELINE (STT + SER + NER + COMET + Graph)")
+                    
+                    # Process through complete orchestrator
+                    analysis_packet = await chat_orchestrator.process_audio(
+                        audio_bytes=audio_data,
+                        conversation_id=conversation_id,
+                        speaker_id=user_id,
+                        sample_rate=16000,
+                        include_graph_updates=True
+                    )
+                    
+                    # Extract transcript for LLM
+                    transcribed_text = analysis_packet.get("transcript", {}).get("text", "")
+                    
+                    # Save user message to database
+                    if transcribed_text:
+                        await create_message(
+                            conversation_id=conversation_id,
+                            content=transcribed_text,
+                            role="user",
+                            sender_id=user_id
+                        )
+                    
+                    # Send complete analysis to client
+                    await websocket.send_json({
+                        "type": "analysis",
+                        "analysis_packet": analysis_packet,
+                        "conversation_id": conversation_id,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    
+                    # ===================================================================
+                    # LLM RESPONSE GENERATION (if text available)
+                    # ===================================================================
+                    if transcribed_text and transcribed_text.strip():
+                        logger.info("Generating AI response with LLM...")
+                        
+                        await websocket.send_json({
+                            "type": "status",
+                            "content": "Generating AI response...",
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        
+                        try:
+                            # Import LLM service
+                            from llm import llm_service
+                            
+                            if llm_service and llm_service.is_ready():
+                                # Get conversation context from graph
+                                graph_context = None
+                                try:
+                                    from contextual import contextual_analyzer
+                                    graph_context = await contextual_analyzer.get_conversation_context(
+                                        conversation_id
+                                    )
+                                except Exception as e:
+                                    logger.warning(f"Could not get graph context: {e}")
+                                
+                                # Get recent conversation history
+                                conversation_history = []
+                                try:
+                                    recent_messages = await get_conversation_messages(conversation_id)
+                                    # Get last 5 messages
+                                    for msg in recent_messages[-5:]:
+                                        conversation_history.append({
+                                            "role": msg.role,
+                                            "content": msg.content
+                                        })
+                                except Exception as e:
+                                    logger.warning(f"Could not get conversation history: {e}")
+                                
+                                # Generate AI response
+                                llm_response = await llm_service.generate_response(
+                                    user_message=transcribed_text,
+                                    analysis_packet=analysis_packet,
+                                    graph_context=graph_context,
+                                    conversation_history=conversation_history
+                                )
+                                
+                                # Save AI response to database
+                                if llm_response.get("text"):
+                                    await create_message(
+                                        conversation_id=conversation_id,
+                                        content=llm_response["text"],
+                                        role="assistant"
+                                    )
+                                
+                                # Send AI response to client
+                                await websocket.send_json({
+                                    "type": "response",
+                                    "ai_response": llm_response,
+                                    "timestamp": datetime.now().isoformat()
+                                })
+                                
+                                logger.info(f"AI Response: {llm_response['text'][:100]}...")
+                            else:
+                                logger.warning("LLM service not available, skipping response generation")
+                        
+                        except Exception as e:
+                            logger.error(f"LLM response generation failed: {e}")
+                            await websocket.send_json({
+                                "type": "error",
+                                "content": "Could not generate AI response",
+                                "error": str(e),
+                                "timestamp": datetime.now().isoformat()
+                            })
+                    
+                    processing_time = (datetime.now() - start_time).total_seconds()
+                    logger.info(
+                        f"Full pipeline complete for {user.username}: "
+                        f"'{transcribed_text[:50]}...' | "
+                        f"Total time: {processing_time*1000:.0f}ms"
+                    )
+                
+                except Exception as e:
+                    logger.error(f"Full pipeline error: {e}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "content": f"Pipeline processing failed: {str(e)}",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    return
+            
+            # ===================================================================
+            # BASIC MODE: STT + SER only (faster, no context)
+            # ===================================================================
+            else:
+                logger.info("Running BASIC MODE (STT + SER only)")
+                
+                # Preprocess audio
+                audio_array = preprocess_audio_for_whisper(audio_data, sample_rate=16000)
+                
+                if audio_array is None or len(audio_array) == 0:
+                    await websocket.send_json({
+                        "type": "error",
+                        "content": "Failed to process audio data",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    return
+                
+                try:
+                    # Run transcription and emotion recognition concurrently
+                    transcription_task = transcription_service.transcribe_audio(audio_array, language="en")
+                    emotion_task = emotion_service.recognize_emotion(audio_array, sampling_rate=16000, return_all_scores=True)
+                    
+                    # Wait for both tasks to complete
+                    transcription_result, emotion_result = await asyncio.gather(
+                        transcription_task,
+                        emotion_task,
+                        return_exceptions=True
+                    )
+                    
+                    # Handle transcription errors
+                    if isinstance(transcription_result, Exception):
+                        logger.error(f"Transcription error: {transcription_result}")
+                        transcription_result = {
+                            "text": "",
+                            "language": "en",
+                            "error": str(transcription_result)
+                        }
+                    
+                    # Handle emotion recognition errors
+                    if isinstance(emotion_result, Exception):
+                        logger.error(f"Emotion recognition error: {emotion_result}")
+                        emotion_result = {
+                            "emotion": "unknown",
+                            "confidence": 0.0,
+                            "error": str(emotion_result)
+                        }
+                    
+                except Exception as e:
+                    logger.error(f"Error during parallel processing: {e}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "content": f"Processing error: {str(e)}",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    return
+                
+                processing_time = (datetime.now() - start_time).total_seconds()
+                
+                transcribed_text = transcription_result.get("text", "")
+                
+                # Build basic response
+                response = {
+                    "type": "analysis",
+                    "transcript": {
+                        "text": transcribed_text,
+                        "language": transcription_result.get("language", "en"),
+                    },
+                    "emotion": {
+                        "primary": emotion_result.get("emotion", "unknown"),
+                        "confidence": emotion_result.get("confidence", 0.0),
+                        "all_scores": emotion_result.get("all_scores", {})
+                    },
+                    "audio": {
+                        "duration": duration,
+                        "sample_rate": 16000
+                    },
+                    "processing": {
+                        "total_time_ms": int(processing_time * 1000),
+                        "transcription_time_ms": transcription_result.get("inference_time_ms", 0),
+                        "emotion_time_ms": emotion_result.get("inference_time_ms", 0)
+                    },
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                # Only send if we have meaningful results
+                if transcribed_text or emotion_result.get("emotion") != "unknown":
+                    await websocket.send_json(response)
+                    
+                    logger.info(
+                        f"Basic analysis for {user.username}: "
+                        f"'{transcribed_text}' | Emotion: {emotion_result.get('emotion')} "
+                        f"({emotion_result.get('confidence', 0):.2f}) | "
+                        f"Processing: {processing_time*1000:.0f}ms"
+                    )
+                else:
+                    # No speech detected or both services failed
+                    await websocket.send_json({
+                        "type": "status",
+                        "content": "No speech detected in audio",
+                        "timestamp": datetime.now().isoformat()
+                    })
         
         except Exception as e:
-            logger.error(f"Error in transcription callback: {e}")
+            logger.error(f"Error in audio processing callback: {e}")
             await websocket.send_json({
                 "type": "error",
                 "content": f"Analysis error: {str(e)}",
@@ -985,7 +1149,7 @@ async def audio_websocket_endpoint(
     
     # Start monitoring buffer for silence timeout
     monitor_task = asyncio.create_task(
-        audio_buffer_manager._monitor_buffers(transcription_callback)
+        audio_buffer_manager._monitor_buffers(audio_processing_callback)
     )
     
     try:
@@ -1013,7 +1177,7 @@ async def audio_websocket_endpoint(
         # Process any remaining audio in buffer
         if buffer.has_data():
             final_audio = buffer.get_buffer()
-            await transcription_callback(user.id, final_audio)
+            await audio_processing_callback(user.id, final_audio)
         
         # Remove buffer
         audio_buffer_manager.remove_buffer(user.id)
