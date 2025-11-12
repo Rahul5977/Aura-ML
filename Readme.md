@@ -2,9 +2,29 @@
 
 ## Project Overview
 
-Aura is a modern, real-time chat application built with FastAPI (backend) and React (frontend), featuring WebSocket-based communication, user authentication, AI-powered conversations, and advanced contextual understanding.
+Aura is a modern, real-time chat application built with FastAPI (backend) and Streamlit (frontend), featuring WebSocket-based communication, AI-powered conversations, and advanced contextual understanding with **complete ML pipeline transparency**.
 
-## 🚀 Current Status: Week 7 COMPLETED ✅
+## 🚀 Current Status: Week 8 - Production Frontend Complete ✅
+
+### NEW: Streamlit Real-Time UI (Production-Grade) ✅
+
+- **Production-grade Streamlit interface** in `aura-frontend/`
+- **Real-time chat** with text and audio support
+- **Live ML pipeline visualization** (all 5 stages visible)
+- **Session management** with conversation history
+- **Audio file upload** (WAV, MP3, M4A, OGG)
+- **Complete transparency** into ML processing stages:
+  - Speech-to-Text (STT) - Whisper
+  - Speech Emotion Recognition (SER) - Wav2Vec2
+  - Named Entity Recognition (NER) - spaCy
+  - Commonsense Reasoning (COMET)
+  - Knowledge Graph Update (Neo4j)
+- **Backend health monitoring**
+- **Session statistics** and analytics
+- **Color-coded emotion and entity badges**
+- **Expandable analysis details**
+- **Docker support** with compose file
+- **Comprehensive documentation**
 
 ### Week 1: Project Setup & Database Design ✅
 
@@ -142,6 +162,13 @@ Aura is a modern, real-time chat application built with FastAPI (backend) and Re
 
 ## 🔧 Tech Stack
 
+### Frontend (NEW!)
+
+- **Streamlit**: Interactive web UI framework
+- **Real-time updates**: Session state management
+- **Responsive design**: Custom CSS styling
+- **Docker support**: Containerized deployment
+
 ### Backend
 
 - **FastAPI**: Modern Python web framework
@@ -174,6 +201,38 @@ Aura is a modern, real-time chat application built with FastAPI (backend) and Re
 
 ## 🚀 Quick Start
 
+### Option 1: Streamlit Frontend (Recommended) **NEW!**
+
+```bash
+# Terminal 1: Start Backend
+cd aura-backend
+python main.py
+
+# Terminal 2: Start Frontend
+cd aura-frontend
+./start.sh  # or start.bat on Windows
+
+# Frontend UI: http://localhost:8501
+# Backend API: http://localhost:8000
+```
+
+See [aura-frontend/QUICKSTART.md](aura-frontend/QUICKSTART.md) for detailed setup.
+
+### Option 2: Docker Full Stack
+
+```bash
+# Start all services (Backend + Frontend + Neo4j)
+cd aura-frontend
+docker-compose up --build
+
+# Frontend UI: http://localhost:8501
+# Backend API: http://localhost:8000
+# API Documentation: http://localhost:8000/docs
+# Neo4j Browser: http://localhost:7474 (neo4j / password)
+```
+
+### Option 3: Backend Only
+
 ```bash
 # Start all services (including Neo4j)
 docker-compose up --build
@@ -186,6 +245,31 @@ docker-compose up --build
 ```
 
 ## 📡 Features
+
+### Streamlit UI (Production Frontend) **NEW!**
+
+```bash
+# Start the UI
+cd aura-frontend
+./start.sh
+
+# Access at http://localhost:8501
+```
+
+**Features:**
+
+- 💬 Real-time text and audio chat
+- 🎤 Audio file upload (WAV, MP3, M4A, OGG)
+- 👁️ Complete ML pipeline visualization
+- 📊 Live session statistics
+- 😊 Color-coded emotion badges
+- 🏷️ Entity highlighting with types
+- 🧠 Commonsense inference display
+- 🔗 Knowledge graph updates
+- ⚡ Performance metrics
+- 🔄 Conversation history
+
+See [aura-frontend/README.md](aura-frontend/README.md) for complete documentation.
 
 ### Real-time Chat
 
@@ -271,6 +355,12 @@ See [WEEK7_IMPLEMENTATION_COMPLETE.md](WEEK7_IMPLEMENTATION_COMPLETE.md) for ful
 
 ## 📚 Documentation
 
+### Frontend Documentation **NEW!**
+
+- [aura-frontend/QUICKSTART.md](aura-frontend/QUICKSTART.md) - 5-minute frontend setup
+- [aura-frontend/README.md](aura-frontend/README.md) - Complete frontend documentation
+- [aura-frontend/IMPLEMENTATION_SUMMARY.md](aura-frontend/IMPLEMENTATION_SUMMARY.md) - Implementation details
+
 ### Quick Starts
 
 - [WEEK5_QUICKSTART.md](WEEK5_QUICKSTART.md) - 5-minute contextual analysis guide
@@ -340,5 +430,5 @@ python test_websocket_chat.py # Chat functionality
 ---
 
 **Last Updated**: October 13, 2025  
-**Status**: Week 7 Complete - Neo4j & LLM Integration ✅  
-**Next**: Week 8 - Advanced Personalization & Recommendations
+**Status**: Week 8 Complete - Production Frontend Complete ✅  
+**Next**: Week 9 - Advanced Personalization & Recommendations

@@ -17,6 +17,17 @@ services:
     depends_on:
       - neo4j
 
+  aura-frontend:
+    build: ./aura-frontend
+    container_name: aura-frontend
+    environment:
+      - BACKEND_URL=http://aura-backend:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - aura-backend
+    restart: unless-stopped
+
   neo4j:
     image: neo4j:5.18-community
     container_name: aura-neo4j
