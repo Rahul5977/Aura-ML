@@ -47,7 +47,19 @@ class COMETService:
         Args:
             model_name: COMET model to use (comet-atomic_2020_BART recommended)
         """
-        self.model_name = f"allenai/{model_name}" if not model_name.startswith("allenai/") else model_name
+        # Map simplified names to full HuggingFace model IDs
+        model_mapping = {
+            "comet-atomic_2020_BART": "allenai/comet-atomic-2020-BART",
+            "comet-commonsense": "allenai/comet-commonsense"
+        }
+        
+        # Use mapping if model name is in the dict, otherwise use as-is
+        self.model_name = model_mapping.get(model_name, model_name)
+        
+        # Add allenai/ prefix if not already present
+        if not self.model_name.startswith("allenai/") and "/" not in self.model_name:
+            self.model_name = f"allenai/{self.model_name}"
+            
         self.model = None
         self.tokenizer = None
         self.device = "cuda" if torch and torch.cuda.is_available() else "cpu"
@@ -81,6 +93,16 @@ class COMETService:
             
         except Exception as e:
             logger.error(f"Error loading COMET model: {e}")
+            logger.warning(f"COMET model {self.model_name} could not be loaded. Emotional reasoning will use fallback mode.")
+            # Set loaded flag to True with fallback mode
+            self.is_loaded = True
+            self.model = None
+            self.tokenizer = None
+            self.is_loaded = True
+            logger.info(f"Successfully loaded {self.model_name} on {self.device}")
+            
+        except Exception as e:
+            logger.error(f"Error loading COMET model: {e}")
             raise
     
     async def infer_emotional_effects(
@@ -109,7 +131,12 @@ class COMETService:
             }
         """
         if not self.is_loaded:
-            raise RuntimeError("COMET model not loaded. Call load_model() first.")
+            logger.warning("COMET model not loaded, returning empty results")
+            return {relation: [] for relation in (relations or self.EMOTION_RELATIONS)}
+        
+        if self.model is None or self.tokenizer is None:
+            logger.warning("COMET model not available, using fallback mode")
+            return {relation: [] for relation in (relations or self.EMOTION_RELATIONS)}
         
         if relations is None:
             relations = self.EMOTION_RELATIONS

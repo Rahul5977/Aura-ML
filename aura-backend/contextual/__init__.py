@@ -10,7 +10,7 @@ Provides advanced NLP capabilities for understanding conversational dynamics:
 from .ner_service import ner_service, NERService
 from .comet_service import comet_service, COMETService
 from .knowledge_graph_service import knowledge_graph_service, KnowledgeGraphService
-from .contextual_analyzer import contextual_analyzer, ContextualAnalyzer
+from .contextual_analyzer import contextual_analyzer, ContextualAnalyzer, initialize_contextual_services
 
 __all__ = [
     'ner_service',
@@ -21,4 +21,5 @@ __all__ = [
     'KnowledgeGraphService',
     'contextual_analyzer',
     'ContextualAnalyzer',
+    'initialize_contextual_services',
 ]
