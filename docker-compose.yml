@@ -1,9 +1,25 @@
 version: "3.9"
 
 services:
+  neo4j:
+    image: neo4j:5.18-community
+    container_name: aura-neo4j
+    restart: always
+    environment:
+      NEO4J_AUTH: neo4j/neo4jpassword
+      NEO4J_dbms_memory_pagecache_size: 512M
+      NEO4J_dbms_memory_heap_initial__size: 512M
+      NEO4J_dbms_memory_heap_max__size: 1G
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - aura-neo4j-data:/data
+
   aura-backend:
     build: ./aura-backend
     container_name: aura-backend
+    restart: unless-stopped
     command: uvicorn main:app --host 0.0.0.0 --port 8000
     volumes:
       - ./aura-backend:/app
@@ -17,31 +33,15 @@ services:
     depends_on:
       - neo4j
 
-  aura-frontend:
-    build: ./aura-frontend
-    container_name: aura-frontend
-    environment:
-      - BACKEND_URL=http://aura-backend:8000
-    ports:
-      - "8501:8501"
-    depends_on:
-      - aura-backend
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: aura-pgadmin
     restart: unless-stopped
-
-  neo4j:
-    image: neo4j:5.18-community
-    container_name: aura-neo4j
-    restart: always
     environment:
-      NEO4J_AUTH: neo4j/neo4jpassword
-      NEO4J_dbms_memory_pagecache_size: 512M
-      NEO4J_dbms_memory_heap_initial__size: 512M
-      NEO4J_dbms_memory_heap_max__size: 1G
+      PGADMIN_DEFAULT_EMAIL: admin@aura.local
+      PGADMIN_DEFAULT_PASSWORD: admin
     ports:
-      - "7474:7474" # HTTP
-      - "7687:7687" # Bolt
-    volumes:
-      - aura-neo4j-data:/data
+      - "5050:80"
 
 volumes:
   aura-neo4j-data:
