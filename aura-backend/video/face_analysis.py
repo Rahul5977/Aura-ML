@@ -1,18 +1,4 @@
-"""
-Face Analysis Pipeline - Week 8 Part 2
-Multi-Model Face Detection, Identity Tracking, and Emotion Recognition
-
-This module provides a complete pipeline for analyzing faces in video frames:
-1. Face Detection: MTCNN for robust face detection
-2. Identity Embeddings: InceptionResnetV1 for 512-d face embeddings
-3. Facial Emotion Recognition: Vision Transformer for emotion classification
-
-This pipeline works in conjunction with the Scene Analysis Pipeline to provide
-comprehensive multi-modal video understanding.
-
-Author: Aura ML Team
-Date: November 2025
-"""
+"""Face Analysis Pipeline - Multi-model face detection and emotion recognition."""
 
 import torch
 import numpy as np
@@ -38,32 +24,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 def load_face_models(device: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Load all necessary models for face analysis pipeline.
-    
-    This function initializes three models:
-    1. MTCNN - Face detection with bounding boxes
-    2. InceptionResnetV1 - Face identity embeddings (512-d vectors)
-    3. ViT Emotion Model - Facial emotion recognition
-    
-    Args:
-        device (Optional[str]): Device to use ('cuda' or 'cpu'). Auto-detected if None
-    
-    Returns:
-        Dict[str, Any]: Dictionary containing:
-            - 'mtcnn': MTCNN face detector
-            - 'identity_model': InceptionResnetV1 for embeddings
-            - 'emotion_model': Emotion recognition model
-            - 'emotion_processor': Image processor for emotion model
-            - 'device': Device being used
-            - 'emotion_labels': List of emotion labels
-    
-    Example:
-        >>> models = load_face_models()
-        >>> print(f"Models loaded on {models['device']}")
-        >>> mtcnn = models['mtcnn']
-        >>> identity_model = models['identity_model']
-    """
+    """Load MTCNN, InceptionResnetV1, and emotion models. Returns models dict."""
     # Determine device
     if device is None:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -218,49 +179,7 @@ def analyze_faces_in_frame(
     device: str = 'cpu',
     confidence_threshold: float = 0.9
 ) -> List[Dict[str, Any]]:
-    """
-    Analyze all faces in a single frame.
-    
-    This function performs a complete 3-step analysis on each detected face:
-    1. Detection: Find all faces and their bounding boxes (MTCNN)
-    2. Identity: Extract 512-d embedding vector for each face (InceptionResnetV1)
-    3. Emotion: Classify facial emotion for each face (ViT)
-    
-    Args:
-        frame (Image.Image): Input frame as PIL Image (RGB)
-        mtcnn: MTCNN face detector
-        identity_model: InceptionResnetV1 for embeddings
-        emotion_model: Emotion classification model
-        emotion_processor: Image processor for emotion model
-        emotion_labels (List[str]): List of emotion label names
-        device (str): Device to use ('cuda' or 'cpu')
-        confidence_threshold (float): Minimum detection confidence (0.0-1.0)
-    
-    Returns:
-        List[Dict[str, Any]]: List of face analysis results, each containing:
-            - 'box': [x1, y1, x2, y2] bounding box coordinates
-            - 'confidence': Detection confidence score
-            - 'identity_embedding': 512-d numpy array (face embedding)
-            - 'emotion': Predicted emotion label (str)
-            - 'emotion_confidence': Confidence score for emotion prediction
-            - 'emotion_scores': Dict of all emotion scores
-    
-    Example:
-        >>> models = load_face_models()
-        >>> image = Image.open('group_photo.jpg')
-        >>> faces = analyze_faces_in_frame(
-        ...     image, 
-        ...     models['mtcnn'],
-        ...     models['identity_model'],
-        ...     models['emotion_model'],
-        ...     models['emotion_processor'],
-        ...     models['emotion_labels'],
-        ...     models['device']
-        ... )
-        >>> print(f"Found {len(faces)} faces")
-        >>> for i, face in enumerate(faces):
-        ...     print(f"Face {i+1}: {face['emotion']} ({face['emotion_confidence']:.2f})")
-    """
+    """Detect faces, extract embeddings, and classify emotions in a frame."""
     faces_data = []
     
     try:
@@ -409,28 +328,7 @@ def analyze_faces_in_video_frames(
     models: Dict[str, Any],
     show_progress: bool = True
 ) -> List[List[Dict[str, Any]]]:
-    """
-    Analyze faces in multiple video frames.
-    
-    This function processes a list of frames and returns face analysis
-    results for each frame.
-    
-    Args:
-        frames (List[Image.Image]): List of PIL Images (video frames)
-        models (Dict[str, Any]): Models dictionary from load_face_models()
-        show_progress (bool): Whether to show progress messages
-    
-    Returns:
-        List[List[Dict[str, Any]]]: List of face analysis results per frame
-    
-    Example:
-        >>> from scene_captioner import extract_keyframes
-        >>> models = load_face_models()
-        >>> keyframes = extract_keyframes('video.mp4', interval_sec=1.0)
-        >>> frames = [kf['frame'] for kf in keyframes]
-        >>> all_faces = analyze_faces_in_video_frames(frames, models)
-        >>> print(f"Analyzed {len(all_faces)} frames")
-    """
+    """Analyze faces in multiple frames. Returns per-frame face results."""
     all_results = []
     
     for i, frame in enumerate(frames):
@@ -461,21 +359,7 @@ def analyze_faces_in_video_frames(
 # ============================================================================
 
 def compute_face_similarity(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
-    """
-    Compute cosine similarity between two face embeddings.
-    
-    Args:
-        embedding1 (np.ndarray): First face embedding (512-d)
-        embedding2 (np.ndarray): Second face embedding (512-d)
-    
-    Returns:
-        float: Similarity score (0.0 to 1.0, higher = more similar)
-    
-    Example:
-        >>> similarity = compute_face_similarity(face1['identity_embedding'], face2['identity_embedding'])
-        >>> if similarity > 0.6:
-        ...     print("Same person!")
-    """
+    """Compute cosine similarity between two face embeddings (0.0-1.0)."""
     # Normalize embeddings
     emb1_norm = embedding1 / np.linalg.norm(embedding1)
     emb2_norm = embedding2 / np.linalg.norm(embedding2)
@@ -493,24 +377,7 @@ def track_identities_across_frames(
     all_faces: List[List[Dict[str, Any]]],
     similarity_threshold: float = 0.6
 ) -> List[List[Dict[str, Any]]]:
-    """
-    Track face identities across multiple frames.
-    
-    This function assigns consistent identity IDs to the same person
-    appearing across multiple frames.
-    
-    Args:
-        all_faces (List[List[Dict]]): Face analysis results from multiple frames
-        similarity_threshold (float): Minimum similarity to consider same person
-    
-    Returns:
-        List[List[Dict]]: Same structure with added 'identity_id' field
-    
-    Example:
-        >>> all_faces = analyze_faces_in_video_frames(frames, models)
-        >>> tracked = track_identities_across_frames(all_faces)
-        >>> print(f"Person 0 appears in {sum(1 for frame in tracked for face in frame if face['identity_id'] == 0)} frames")
-    """
+    """Assign consistent identity IDs to same person across frames."""
     known_identities = []  # List of representative embeddings
     results = []
     

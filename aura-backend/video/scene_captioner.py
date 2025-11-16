@@ -1,18 +1,4 @@
-"""
-Scene Analysis Pipeline - Week 8
-Multi-Modal Vision-Language Model for Video Caption Generation
-
-This module provides a complete pipeline for extracting keyframes from videos
-and generating descriptive captions using the LLaVA (Large Language and Vision Assistant) model.
-
-Components:
-1. Video Processing: Extract keyframes from video files at specified intervals
-2. LLaVA Integration: Generate descriptive captions for each frame
-3. Scene Analysis Orchestration: Complete pipeline from video to captions
-
-Author: Aura ML Team
-Date: November 2025
-"""
+"""Scene analysis pipeline using LLaVA for video caption generation."""
 
 import cv2
 import torch
@@ -44,34 +30,7 @@ def extract_keyframes(
     interval_sec: float = 1.0,
     max_frames: Optional[int] = None
 ) -> List[Dict[str, Any]]:
-    """
-    Extract keyframes from a video file at specified time intervals.
-    
-    This function opens a video file using OpenCV, iterates through frames,
-    and extracts one frame every `interval_sec` seconds. Each extracted frame
-    is converted to a PIL Image for compatibility with vision-language models.
-    
-    Args:
-        video_path (str): Path to the input video file
-        interval_sec (float): Time interval in seconds between keyframes (default: 1.0)
-        max_frames (Optional[int]): Maximum number of frames to extract (default: None)
-    
-    Returns:
-        List[Dict[str, Any]]: List of dictionaries containing:
-            - 'frame': PIL.Image object of the keyframe
-            - 'timestamp': Float timestamp in seconds
-            - 'frame_number': Integer frame index in the video
-            - 'formatted_time': Human-readable timestamp (HH:MM:SS)
-    
-    Raises:
-        FileNotFoundError: If video file doesn't exist
-        ValueError: If video cannot be opened or has no frames
-        
-    Example:
-        >>> keyframes = extract_keyframes('video.mp4', interval_sec=2.0)
-        >>> print(f"Extracted {len(keyframes)} keyframes")
-        >>> print(f"First frame at {keyframes[0]['formatted_time']}")
-    """
+    """Extract keyframes from video at specified time intervals."""
     # Validate video path
     video_path = Path(video_path)
     if not video_path.exists():
@@ -173,28 +132,7 @@ def extract_keyframes(
 # ============================================================================
 
 class SceneCaptioner:
-    """
-    LLaVA-based Scene Captioner for generating descriptive captions from images.
-    
-    This class integrates the LLaVA (Large Language and Vision Assistant) model
-    from Hugging Face to generate natural language descriptions of video frames.
-    
-    LLaVA is a multimodal model that combines a vision encoder (CLIP) with a
-    large language model to understand images and generate detailed descriptions.
-    
-    Attributes:
-        model_name (str): Hugging Face model identifier
-        device (str): Device for inference ('cuda' or 'cpu')
-        model: The loaded LLaVA model
-        processor: The loaded LLaVA processor
-        is_loaded (bool): Whether the model is successfully loaded
-    
-    Example:
-        >>> captioner = SceneCaptioner()
-        >>> image = Image.open('frame.jpg')
-        >>> caption = captioner.generate_caption(image)
-        >>> print(caption)
-    """
+    """LLaVA-based scene captioner for generating image descriptions."""
     
     def __init__(
         self, 
@@ -202,14 +140,6 @@ class SceneCaptioner:
         device: Optional[str] = None,
         load_in_8bit: bool = False
     ):
-        """
-        Initialize the Scene Captioner with LLaVA model.
-        
-        Args:
-            model_name (str): Hugging Face model name (default: llava-1.5-7b-hf)
-            device (Optional[str]): Device to use ('cuda' or 'cpu'). Auto-detected if None
-            load_in_8bit (bool): Whether to load model in 8-bit for memory efficiency
-        """
         self.model_name = model_name
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self.load_in_8bit = load_in_8bit
@@ -226,12 +156,6 @@ class SceneCaptioner:
         self._load_model()
     
     def _load_model(self):
-        """
-        Load the LLaVA model and processor from Hugging Face.
-        
-        This method handles the actual model loading with proper error handling
-        and memory optimization options.
-        """
         try:
             from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
             
@@ -292,31 +216,7 @@ class SceneCaptioner:
         temperature: float = 0.7,
         do_sample: bool = True
     ) -> str:
-        """
-        Generate a descriptive caption for a single image.
-        
-        This method uses the LLaVA model to analyze an image and generate
-        a natural language description of what's happening in the scene.
-        
-        Args:
-            image (Image.Image): PIL Image to caption
-            prompt (Optional[str]): Custom prompt for caption generation
-            max_new_tokens (int): Maximum length of generated caption
-            temperature (float): Sampling temperature (0.0 = deterministic, 1.0 = creative)
-            do_sample (bool): Whether to use sampling (vs greedy decoding)
-        
-        Returns:
-            str: Generated caption describing the image
-        
-        Raises:
-            RuntimeError: If model is not loaded
-            
-        Example:
-            >>> image = Image.open('scene.jpg')
-            >>> caption = captioner.generate_caption(image)
-            >>> print(caption)
-            "A person is sitting at a desk working on a laptop computer..."
-        """
+        """Generate a descriptive caption for an image."""
         if not self.is_loaded:
             raise RuntimeError("Model not loaded. Please initialize SceneCaptioner first.")
         
@@ -370,17 +270,7 @@ class SceneCaptioner:
         batch_size: int = 4,
         **kwargs
     ) -> List[str]:
-        """
-        Generate captions for multiple images efficiently.
-        
-        Args:
-            images (List[Image.Image]): List of PIL Images
-            batch_size (int): Number of images to process at once
-            **kwargs: Additional arguments passed to generate_caption
-        
-        Returns:
-            List[str]: List of generated captions
-        """
+        """Generate captions for multiple images in batches."""
         captions = []
         
         for i in range(0, len(images), batch_size):
@@ -395,7 +285,6 @@ class SceneCaptioner:
         return captions
     
     def __del__(self):
-        """Cleanup when object is destroyed"""
         if self.model is not None:
             del self.model
         if self.processor is not None:
@@ -416,35 +305,7 @@ def analyze_video_scene(
     save_output: bool = True,
     output_path: Optional[str] = None
 ) -> List[Dict[str, Any]]:
-    """
-    Complete pipeline: Extract keyframes from video and generate captions.
-    
-    This is the main orchestration function that combines video processing
-    and caption generation into a single pipeline. It extracts keyframes
-    from a video file and generates descriptive captions for each frame.
-    
-    Args:
-        video_path (str): Path to input video file
-        interval_sec (float): Time interval between keyframes in seconds
-        max_frames (Optional[int]): Maximum number of frames to process
-        model_name (str): Hugging Face model name for LLaVA
-        save_output (bool): Whether to save results to JSON file
-        output_path (Optional[str]): Path for output JSON file
-    
-    Returns:
-        List[Dict[str, Any]]: List of dictionaries containing:
-            - 'timestamp': Float timestamp in seconds
-            - 'formatted_time': Human-readable timestamp
-            - 'frame_number': Frame index
-            - 'caption': Generated caption text
-    
-    Example:
-        >>> results = analyze_video_scene('interview.mp4', interval_sec=2.0)
-        >>> for result in results:
-        ...     print(f"[{result['formatted_time']}] {result['caption']}")
-        [00:00:00] A man is sitting at a desk...
-        [00:00:02] The man is typing on a laptop...
-    """
+    """Extract keyframes and generate captions for a video."""
     logger.info("="*80)
     logger.info("🎬 STARTING SCENE ANALYSIS PIPELINE")
     logger.info("="*80)

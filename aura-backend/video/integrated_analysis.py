@@ -1,15 +1,4 @@
-"""
-Integrated Video Analysis - Week 8 Complete
-Combines Scene Analysis + Face Analysis for comprehensive video understanding
-
-This module provides a unified interface for multi-modal video analysis:
-1. Scene Understanding (LLaVA-based captioning)
-2. Face Detection & Tracking (MTCNN + InceptionResnetV1)
-3. Emotion Recognition (Vision Transformer)
-
-Author: Aura ML Team
-Date: November 2025
-"""
+"""Integrated video analysis combining scene captions and face detection."""
 
 import logging
 from typing import List, Dict, Any, Optional
@@ -41,43 +30,7 @@ def analyze_video_complete(
     analyze_scenes: bool = True,
     analyze_faces: bool = True
 ) -> List[Dict[str, Any]]:
-    """
-    Perform complete multi-modal video analysis.
-    
-    This function extracts keyframes and analyzes both:
-    1. Scene content (what's happening in the video)
-    2. Face attributes (who's there, their emotions)
-    
-    Args:
-        video_path (str): Path to video file
-        keyframe_interval (float): Seconds between extracted keyframes
-        scene_model (str): LLaVA model ID for scene captioning
-        face_confidence (float): Minimum confidence for face detection (0-1)
-        identity_threshold (float): Minimum similarity for identity tracking (0-1)
-        analyze_scenes (bool): Whether to perform scene analysis
-        analyze_faces (bool): Whether to perform face analysis
-    
-    Returns:
-        List[Dict[str, Any]]: Analysis results for each keyframe:
-            - timestamp: Time in video (seconds)
-            - frame_number: Frame index in video
-            - scene_caption: AI-generated description of scene (if enabled)
-            - faces: List of detected faces with emotions and embeddings
-            - num_faces: Count of detected faces in frame
-            - emotions: List of emotions present in frame
-            - unique_people: Count of unique identities in frame
-    
-    Example:
-        >>> # Full analysis
-        >>> results = analyze_video_complete('meeting.mp4')
-        >>> print(f"Analyzed {len(results)} frames")
-        >>> 
-        >>> # Scene only
-        >>> results = analyze_video_complete('video.mp4', analyze_faces=False)
-        >>> 
-        >>> # Faces only
-        >>> results = analyze_video_complete('video.mp4', analyze_scenes=False)
-    """
+    """Analyze video with scene captions and face detection per keyframe."""
     
     logger.info("="*80)
     logger.info("🎬 COMPLETE VIDEO ANALYSIS")
@@ -288,22 +241,7 @@ def save_analysis_results(
     output_path: str,
     include_embeddings: bool = False
 ) -> None:
-    """
-    Save analysis results to JSON file.
-    
-    Args:
-        results (List[Dict[str, Any]]): Results from analyze_video_complete()
-        output_path (str): Path to save JSON file
-        include_embeddings (bool): Whether to include identity embeddings
-                                   (Warning: embeddings are large ~2KB per face)
-    
-    Example:
-        >>> results = analyze_video_complete('video.mp4')
-        >>> save_analysis_results(results, 'output.json')
-        >>> 
-        >>> # With embeddings for downstream identity tasks
-        >>> save_analysis_results(results, 'output.json', include_embeddings=True)
-    """
+    """Save analysis results to JSON file. Optionally includes face embeddings."""
     
     logger.info(f"💾 Saving results to: {output_path}")
     
@@ -353,24 +291,7 @@ def save_analysis_results(
 
 
 def generate_text_summary(results: List[Dict[str, Any]]) -> str:
-    """
-    Generate human-readable text summary of video analysis.
-    
-    Args:
-        results (List[Dict[str, Any]]): Results from analyze_video_complete()
-    
-    Returns:
-        str: Formatted text summary
-    
-    Example:
-        >>> results = analyze_video_complete('video.mp4')
-        >>> summary = generate_text_summary(results)
-        >>> print(summary)
-        >>> 
-        >>> # Save to file
-        >>> with open('summary.txt', 'w') as f:
-        ...     f.write(summary)
-    """
+    """Generate human-readable text summary of video analysis results."""
     
     lines = []
     lines.append("="*80)
@@ -545,10 +466,6 @@ def get_analysis_statistics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 # ============================================================================
 
 if __name__ == "__main__":
-    """
-    Demo script showing complete video analysis workflow.
-    """
-    
     import sys
     
     print("\n" + "="*80)
