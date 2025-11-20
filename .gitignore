@@ -382,3 +382,181 @@ sketch
 
 # Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
 
+# ============================================================================
+# AURA ML SPECIFIC RULES
+# ============================================================================
+
+# ML Model Files (Large Binary Files - DO NOT PUSH)
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+*.h5
+*.pkl
+*.pickle
+
+# Model Checkpoints (Keep structure, ignore weights)
+data/models/*/checkpoint-*/
+data/models/ece/ece_roberta_model/*.safetensors
+data/models/ece/ece_roberta_model/checkpoint-*/
+data/models/llm/llama3_finetuned_final/*.safetensors
+data/models/llm/llama3_finetuned_final/adapter_model.safetensors
+
+# Keep config files but ignore model weights
+!data/models/**/config.json
+!data/models/**/adapter_config.json
+!data/models/**/tokenizer_config.json
+!data/models/**/special_tokens_map.json
+!data/models/**/vocab.json
+!data/models/**/merges.txt
+!data/models/**/tokenizer.json
+
+# Training Outputs & Logs
+data/outputs/
+runs/
+wandb/
+tensorboard_logs/
+lightning_logs/
+mlruns/
+
+# Processed Datasets (Can be regenerated)
+data/processed/*/
+!data/processed/.gitkeep
+
+# Raw Datasets (Too large for git)
+data/raw/
+!data/raw/.gitkeep
+
+# Dataset Files
+*.csv
+*.json
+*.jsonl
+*.parquet
+*.arrow
+*.feather
+datasets/
+
+# Notebook Checkpoints
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# Video Files (Too large for git)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.flv
+*.wmv
+*.webm
+*.m4v
+
+# Audio Files (Too large for git)
+*.wav
+*.mp3
+*.flac
+*.aac
+*.ogg
+*.m4a
+*.wma
+
+# Image Datasets
+data/images/
+data/videos/
+data/audio/
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+*.bak
+*~
+
+# API Keys & Environment Variables
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# Secrets & Credentials
+secrets/
+credentials/
+*.key
+*.pem
+*.crt
+*.p12
+.api_keys
+.tokens
+*.token
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+
+# Hugging Face Cache
+.cache/
+.huggingface/
+
+# Compiled Extensions
+*.so
+*.dylib
+*.dll
+
+# Test Coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff
+.ruff_cache/
+
+# System Files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+
+# IDE Settings (Project-specific)
+.idea/
+*.swp
+*.swo
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+*.out
+*.err
+
+# Archives (if accidentally created)
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# ============================================================================
+# KEEP THESE IMPORTANT FILES (Explicitly allow)
+# ============================================================================
+!README.md
+!requirements/*.txt
+!setup.py
+!migrate.sh
+!cleanup.sh
+!docs/*.md
+!configs/**/*.yaml
+!configs/**/*.json
+

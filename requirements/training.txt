@@ -1,0 +1,10 @@
+# Training requirements
+-r base.txt
+
+unsloth>=2025.11.0
+trl>=0.24.0
+peft>=0.18.0
+bitsandbytes>=0.48.0
+scipy>=1.11.0
+matplotlib>=3.7.0
+wandb>=0.15.0  # Optional for experiment tracking
