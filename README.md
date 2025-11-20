@@ -277,30 +277,58 @@ print(response)
 
 ## 🎓 Training
 
-### Train ECE Model (Emotion-Cause Extraction)
+### Step 1: Generate ECE Dataset
+
+First, generate the Emotion-Cause Extraction dataset from ESConv:
+
+```bash
+python examples/generate_ece_dataset.py
+```
+
+This creates:
+- `ece_train.json` - Training data (16,211 samples)
+- `ece_val.json` - Validation data (2,026 samples)  
+- `ece_test.json` - Test data (2,027 samples)
+
+### Step 2: Train ECE Model
+
+Train the RoBERTa-based ECE classifier:
 
 ```bash
 python scripts/train_ece.py \
-  --data-path ./datasets/esconv_dataset \
+  --data-path ./data/processed/ece \
   --output-dir ./data/models/ece \
   --epochs 3 \
   --batch-size 16
 ```
 
-### Generate Training Prompts
+### Step 3: Generate Hypercontextual Dataset ✨ NEW
+
+Generate the **hypercontextual instruction-tuning dataset** (31,247 samples):
 
 ```bash
-python scripts/generate_prompts.py \
-  --input ./datasets/esconv_dataset \
-  --output ./datasets/llama3_training_data \
-  --ece-model ./data/models/ece/ece_roberta_model
+python examples/generate_hypercontextual_dataset.py
 ```
 
-### Fine-tune LLM
+This enriches ESConv with multi-modal analysis:
+- **Emotion labels** (from ESConv)
+- **Extracted causes** (from ECE model)
+- **Named entities** (from spaCy NER)
+- **Problem types** (heuristic classification)
+- **Conversation history** (sliding window)
+- **Support strategies** (from ESConv)
+
+**Output**: `llm_train.json` (~28K samples), `llm_val.json` (~3K samples)
+
+See [docs/HYPERCONTEXTUAL_DATASET.md](docs/HYPERCONTEXTUAL_DATASET.md) for details.
+
+### Step 4: Fine-tune LLM
+
+Fine-tune LLaMA 3.2 3B on the hypercontextual dataset:
 
 ```bash
 python scripts/train_llm.py \
-  --dataset ./datasets/llama3_training_data \
+  --dataset ./data/processed/hypercontextual \
   --output-dir ./data/models/llm/llama3_finetuned \
   --epochs 3 \
   --batch-size 2 \
