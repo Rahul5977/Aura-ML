@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
-from api.routers import chat, emotion, health
+from api.routers import chat, emotion, health, audio
 from api.services.chat_service import ChatService
 from aura_ml.config.settings import settings
 
@@ -69,6 +69,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(emotion.router, prefix="/api/v1", tags=["emotion"])
+app.include_router(audio.router, prefix="/api/v1", tags=["audio"])
 
 
 @app.get("/")

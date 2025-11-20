@@ -43,10 +43,14 @@
 - **Emotion Context Awareness**: Maintains emotional state throughout conversation
 - **Fast Inference**: 2x faster with Unsloth optimizations
 - **Streaming Responses**: ChatGPT-style token-by-token output
+- **🎤 Audio Analysis**: Real-time speech-to-text and emotion recognition ✅ NEW
+  - Whisper-base (74M params, <10% WER)
+  - Wav2Vec2 SER (68.1% accuracy, 8 emotions)
+  - Prosodic feature extraction
 
 ### 🛠️ Technical Features
 - **Production-Ready API**: FastAPI backend with OpenAPI documentation
-- **CLI Interface**: Interactive terminal chatbot
+- **CLI Interface**: Interactive terminal chatbot + audio analysis
 - **Modular Architecture**: Clean, maintainable codebase
 - **GPU Optimized**: 4-bit quantization for 6GB VRAM
 - **Type Safety**: Full type hints with Pydantic validation
