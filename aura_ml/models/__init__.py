@@ -24,6 +24,22 @@ try:
 except ImportError:
     _has_audio = False
 
+try:
+    from aura_ml.models.video_processor import (
+        FaceDetector,
+        KeyframeExtractor,
+        FaceLandmarks,
+        VideoFrame
+    )
+    from aura_ml.models.facial_emotion_cnn import (
+        FacialEmotionCNN,
+        FacialEmotionRecognizer,
+        EmotionVideoProcessor
+    )
+    _has_video = True
+except ImportError:
+    _has_video = False
+
 # Build __all__ dynamically based on available imports
 __all__ = []
 
@@ -39,5 +55,16 @@ if _has_audio:
         "WhisperSTT", 
         "SpeechEmotionRecognizer",
         "AudioAnalysisResult"
+    ])
+
+if _has_video:
+    __all__.extend([
+        "FaceDetector",
+        "KeyframeExtractor",
+        "FaceLandmarks",
+        "VideoFrame",
+        "FacialEmotionCNN",
+        "FacialEmotionRecognizer",
+        "EmotionVideoProcessor"
     ])
 
