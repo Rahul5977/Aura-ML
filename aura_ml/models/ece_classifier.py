@@ -374,3 +374,132 @@ if __name__ == "__main__":
     print(f"   Token logits shape: {outputs.token_logits.shape}")
     
     print("\n✅ Model architecture test passed!")
+
+
+class EmotionCauseExtractor:
+    """
+    High-level wrapper for Emotion Cause Extraction
+    
+    Provides easy-to-use interface for extracting emotion causes from text.
+    """
+    
+    def __init__(self, model_path: str, device: str = None):
+        """
+        Initialize ECE model
+        
+        Args:
+            model_path: Path to trained ECE model
+            device: Device to run on (cuda/cpu), auto-detected if None
+        """
+        import os
+        from pathlib import Path
+        from transformers import RobertaTokenizer
+        
+        self.model_path = Path(model_path)
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = None
+        self.tokenizer = None
+        
+    def load_model(self):
+        """Load the trained ECE model and tokenizer"""
+        from transformers import RobertaTokenizer
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f"Loading ECE model from: {self.model_path}")
+        
+        # Load tokenizer
+        self.tokenizer = RobertaTokenizer.from_pretrained(str(self.model_path))
+        
+        # Load model
+        self.model = RoBERTaForECE.from_pretrained(str(self.model_path))
+        self.model.to(self.device)
+        self.model.eval()
+        
+        logger.info(f"✓ ECE model loaded on {self.device}")
+        
+    def extract_causes(
+        self, 
+        text: str, 
+        emotion: str,
+        threshold: float = 0.5
+    ) -> Dict[str, Any]:
+        """
+        Extract emotion causes from text
+        
+        Args:
+            text: Input text
+            emotion: Detected emotion
+            threshold: Confidence threshold for cause extraction
+            
+        Returns:
+            Dict with 'causes' list and metadata
+        """
+        if self.model is None:
+            raise RuntimeError("Model not loaded. Call load_model() first.")
+        
+        # Tokenize
+        inputs = self.tokenizer(
+            text,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=128
+        ).to(self.device)
+        
+        # Predict
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+        
+        # Get clause-level prediction
+        clause_probs = torch.softmax(outputs.clause_logits, dim=-1)
+        contains_cause = clause_probs[0, 1].item() > threshold
+        
+        if not contains_cause:
+            return {'causes': [], 'confidence': clause_probs[0, 1].item()}
+        
+        # Get token-level predictions (BIO tags)
+        token_preds = torch.argmax(outputs.token_logits, dim=-1)[0]
+        tokens = self.tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])
+        
+        # Extract cause spans
+        causes = []
+        current_cause = []
+        
+        for token, pred in zip(tokens, token_preds):
+            if token in ['<s>', '</s>', '<pad>']:
+                continue
+            
+            pred_label = pred.item()
+            if pred_label == 1:  # B-CAUSE
+                if current_cause:
+                    cause_text = self.tokenizer.convert_tokens_to_string(current_cause)
+                    causes.append(cause_text.strip())
+                current_cause = [token]
+            elif pred_label == 2:  # I-CAUSE
+                current_cause.append(token)
+            else:  # O
+                if current_cause:
+                    cause_text = self.tokenizer.convert_tokens_to_string(current_cause)
+                    causes.append(cause_text.strip())
+                    current_cause = []
+        
+        # Add final cause if exists
+        if current_cause:
+            cause_text = self.tokenizer.convert_tokens_to_string(current_cause)
+            causes.append(cause_text.strip())
+        
+        # Format results
+        result = {
+            'causes': [
+                {
+                    'text': cause,
+                    'confidence': clause_probs[0, 1].item()
+                }
+                for cause in causes if cause
+            ],
+            'emotion': emotion,
+            'contains_cause': contains_cause
+        }
+        
+        return result
